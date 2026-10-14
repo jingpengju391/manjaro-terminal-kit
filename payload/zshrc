@@ -1,0 +1,66 @@
+typeset -U path
+path=("$HOME/.local/bin" $path)
+# Use powerline
+USE_POWERLINE="true"
+# Has weird character width
+# Example:
+#    is not a diamond
+HAS_WIDECHARS="false"
+# Source manjaro-zsh-configuration
+if [[ -e /usr/share/zsh/manjaro-zsh-config ]]; then
+  source /usr/share/zsh/manjaro-zsh-config
+fi
+# Preserve command suggestions independently of the prompt theme.
+if [[ -r /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
+  source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+fi
+
+# Starship prompt for both standalone and VS Code terminals.
+if [[ -x "$HOME/.local/bin/starship" ]]; then
+  eval "$("$HOME/.local/bin/starship" init zsh)"
+else
+  source /usr/share/zsh/manjaro-zsh-prompt
+fi
+
+# fzf: history search (Ctrl-R), file selection (Ctrl-T), directory search (Alt-C).
+if [[ -x "$HOME/.local/bin/fzf" ]]; then
+  typeset -U path
+  path=("$HOME/.local/bin" $path)
+  export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:+$FZF_DEFAULT_OPTS }--height 50% --layout=reverse --border"
+  source <("$HOME/.local/bin/fzf" --zsh)
+fi
+
+# Enter the work tmux session, creating it when needed.
+function _tmux_work_enter() {
+  if [[ -n "$TMUX" ]]; then
+    "$HOME/.local/bin/tmux" switch-client -t work 2>/dev/null ||
+      "$HOME/.local/bin/tmux" new-session -d -s work \; switch-client -t work
+  else
+    "$HOME/.local/bin/tmux" new-session -A -s work
+  fi
+}
+
+# Ctrl-T enters tmux; keep fzf file search on Alt-T.
+function _tmux_work_widget() {
+  zle push-line
+  BUFFER='_tmux_work_enter'
+  zle accept-line
+}
+zle -N _tmux_work_widget
+bindkey -M emacs '^T' _tmux_work_widget
+bindkey -M viins '^T' _tmux_work_widget
+bindkey -M vicmd '^T' _tmux_work_widget
+if (( $+widgets[fzf-file-widget] )); then
+  bindkey -M emacs '^[t' fzf-file-widget
+  bindkey -M viins '^[t' fzf-file-widget
+fi
+
+# Remove the previous single-letter shortcut when reloading this file.
+unfunction t 2>/dev/null
+
+# Soft sage green for recognized commands, shared by all zsh terminals.
+typeset -gA ZSH_HIGHLIGHT_STYLES
+for _sage_token in command builtin alias suffix-alias global-alias function hashed-command precommand; do
+  ZSH_HIGHLIGHT_STYLES[$_sage_token]='fg=#9BC8AC'
+done
+unset _sage_token

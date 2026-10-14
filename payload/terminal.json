@@ -1,0 +1,112 @@
+[
+  {
+    "name": "background-mode",
+    "type": "string",
+    "value": "TERMINAL_BACKGROUND_TRANSPARENT"
+  },
+  {
+    "name": "background-darkness",
+    "type": "double",
+    "value": "0.75"
+  },
+  {
+    "name": "misc-always-show-tabs",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-bell",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-borders-default",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-cursor-blinks",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-cursor-shape",
+    "type": "string",
+    "value": "TERMINAL_CURSOR_SHAPE_BLOCK"
+  },
+  {
+    "name": "misc-default-geometry",
+    "type": "string",
+    "value": "120x24"
+  },
+  {
+    "name": "misc-inherit-geometry",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-menubar-default",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-mouse-autohide",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-toolbar-default",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "misc-confirm-close",
+    "type": "bool",
+    "value": "true"
+  },
+  {
+    "name": "misc-cycle-tabs",
+    "type": "bool",
+    "value": "true"
+  },
+  {
+    "name": "misc-tab-close-buttons",
+    "type": "bool",
+    "value": "true"
+  },
+  {
+    "name": "misc-tab-close-middle-click",
+    "type": "bool",
+    "value": "true"
+  },
+  {
+    "name": "misc-tab-position",
+    "type": "string",
+    "value": "GTK_POS_TOP"
+  },
+  {
+    "name": "misc-highlight-urls",
+    "type": "bool",
+    "value": "true"
+  },
+  {
+    "name": "scrolling-lines",
+    "type": "uint",
+    "value": "999999"
+  },
+  {
+    "name": "scrolling-on-output",
+    "type": "bool",
+    "value": "false"
+  },
+  {
+    "name": "scrolling-bar",
+    "type": "string",
+    "value": "TERMINAL_SCROLLBAR_NONE"
+  },
+  {
+    "name": "font-name",
+    "type": "string",
+    "value": "MesloLGS NF 10"
+  }
+]
