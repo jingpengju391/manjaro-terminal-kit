@@ -48,7 +48,7 @@ tar -xzf manjaro-terminal-kit.tar.gz
 如果目标电脑已装齐依赖，可以直接进入下一步。否则执行：
 
 ```bash
-sudo pacman -S --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig
+sudo pacman -S --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3
 ```
 
 依赖安装需要网络和管理员密码。主题、字体、Starship、fzf 和 tmux 已打包，不需要再次下载。
@@ -100,8 +100,8 @@ exec zsh
 1. 输入 `cd` 或 `clear`，观察灰薄荷绿命令高亮。
 2. 按 `Ctrl+T`，进入名为 `work` 的 tmux 会话。
 3. 按 `Ctrl+N` 新建一个窗口。
-4. 按 `Alt+左/右` 切换窗口。
-5. 按 `Alt+反斜杠` 创建左右分屏，再用 `Ctrl+方向键` 切换。
+4. 按 `Ctrl+左/右` 切换窗口。
+5. 按 `Ctrl+反斜杠` 创建左右分屏，再用 `Alt+方向键` 切换。
 6. 按 `Ctrl+R` 搜索历史命令。
 
 ## 3. VS Code 终端
@@ -145,7 +145,7 @@ bash manjaro-terminal-kit/install.sh --vscode
 | 窗口（window） | 工作空间里的标签页 | 底部的 `1:zsh`、`2:zsh`、`3:zsh` |
 | 分屏（pane） | 同一窗口里并排显示的终端 | 左边写代码，右边运行命令 |
 
-`Ctrl+N` 增加底部窗口编号；`Alt+反斜杠` 或 `Alt+减号` 则切分当前窗口。
+`Ctrl+N` 增加底部窗口编号；`Ctrl+反斜杠` 或 `Ctrl+减号` 则切分当前窗口。
 
 ### 不需要前缀的组合键
 
@@ -154,15 +154,15 @@ bash manjaro-terminal-kit/install.sh --vscode
 | `Ctrl+T` | 创建或恢复 `work` 会话 | zsh 命令行提示符处 |
 | `Ctrl+N` | 新建窗口，沿用当前目录 | tmux 内 |
 | `Ctrl+Y` | 关闭当前窗口，按 `y` 确认 | tmux 内；会关闭该窗口全部分屏及程序 |
-| `Alt+←` | 切到上一个窗口 | tmux 内 |
-| `Alt+→` | 切到下一个窗口 | tmux 内 |
-| `Alt+\` | 左右分屏 | tmux 内 |
-| `Alt+-` | 上下分屏 | tmux 内 |
-| `Ctrl+←/→/↑/↓` | 切到对应方向的分屏 | tmux 内 |
+| `Ctrl+←` | 切到上一个窗口 | tmux 内 |
+| `Ctrl+→` | 切到下一个窗口 | tmux 内 |
+| `Ctrl+\` | 左右分屏 | tmux 内 |
+| `Ctrl+-` | 上下分屏 | tmux 内 |
+| `Alt+←/→/↑/↓` | 切到对应方向的分屏 | tmux 内 |
 | 鼠标单击 | 选择分屏 | tmux 内 |
 | 鼠标拖动分隔线 | 调整工作分屏大小 | tmux 内 |
 
-`Alt+\` 是按住 Alt 再按反斜杠键，不需要 Shift。拆分前请先选中工作分屏，不要选顶部监控栏。
+`Ctrl+\` 是按住 Ctrl 再按反斜杠键，不需要 Shift。拆分前请先选中工作分屏，不要选顶部监控栏。
 
 ### 使用 Ctrl+B 前缀的快捷键
 
@@ -171,12 +171,12 @@ bash manjaro-terminal-kit/install.sh --vscode
 | 前缀后按 | 功能 | 说明 |
 | --- | --- | --- |
 | `c` | 新建窗口 | `Ctrl+N` 的替代方式 |
-| `n` / `p` | 下一个 / 上一个窗口 | Alt 组合键冲突时可用 |
+| `n` / `p` | 下一个 / 上一个窗口 | Ctrl 方向键冲突时可用 |
 | `1`、`2`、`3`… | 跳到对应编号窗口 | 例如 `Ctrl+B` 后按 `2` |
 | `w` | 打开窗口列表 | 方向键选择，Enter 确认 |
 | `\` | 左右分屏 | 备用分屏方式 |
 | `-` | 上下分屏 | 备用分屏方式 |
-| 方向键 | 切换分屏 | Ctrl 方向键冲突时可用 |
+| 方向键 | 切换分屏 | Alt 方向键冲突时可用 |
 | `z` | 放大当前分屏 / 恢复布局 | 放大期间顶部监控也会隐藏 |
 | `d` | 离开会话，返回外层终端 | 会话和程序仍在后台运行 |
 | `x` | 关闭当前分屏 | 出现确认后按 `y`；会终止其中的程序 |
@@ -356,3 +356,17 @@ python3 ~/.local/state/manjaro-terminal-kit/实际时间戳/restore.py
 - 包内校验、本机只读依赖检查、Python/zsh/Bash 语法和 Starship TOML 解析已检查。
 - 尚未在另一台全新 Manjaro 电脑上完成端到端安装验证。
 - 第三方许可保存在 `licenses/`，各组件保留原作者版权。
+
+### Ctrl+- 被终端拦截时
+
+部分终端将 `Ctrl+-` 用于缩小字体，需要先在终端快捷键设置中解除冲突。本配置也支持传统编码 `Ctrl+_`（通常为 `Ctrl+Shift+-`）进行上下分屏；备用操作仍是 `Ctrl+B` 松开后按 `-`。
+
+### 分屏内直接拖选复制
+
+在工作分屏内直接按住鼠标左键拖选，松开即复制到系统剪贴板，并保留选区高亮；按 `Esc` 退出选择模式，继续输入命令。**不用 Shift，也不用 Ctrl+Shift+C**，选择不会跨到相邻分屏。粘贴仍用 `Ctrl+Shift+V`。此功能依赖 X11、python-gobject 和 GTK 3；一个后台辅助进程持有最近复制的内容，剪贴板被替换后退出。
+
+鼠标拖选优先由 tmux 处理，即使分屏内应用启用了鼠标模式，也会进入 tmux 文本选择。选择完成后按 `Esc` 返回应用。
+
+选中文字显示蓝底白字，松开鼠标会复制并保留选区；按 `Esc` 返回命令行。
+
+若能复制但拖动时没有高亮，检查 `copy-mode-selection-style`。本配置为 tmux 3.7 显式指定蓝底白字，不仅设置 `mode-style`。

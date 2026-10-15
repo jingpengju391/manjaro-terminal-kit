@@ -15,7 +15,8 @@ for f in ['/usr/share/zsh/manjaro-zsh-config','/usr/share/zsh/plugins/zsh-autosu
  if not Path(f).is_file(): missing.append(f)
 if missing:
  print('缺少依赖：',*missing,sep='\n')
- raise SystemExit('请先执行：sudo pacman -S --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig')
+ raise SystemExit('请先执行：sudo pacman -S --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3')
+subprocess.run(['python3', '-c', "import gi; gi.require_version('Gtk', '3.0'); from gi.repository import Gtk"], check=True)
 subprocess.run(['xfconf-query','-c','xfce4-terminal','-l'],check=True,stdout=subprocess.DEVNULL)
 vs=h/'.config/Code/User/settings.json'; vsdata=None
 if a.vscode:
