@@ -37,6 +37,27 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(setup.detect({'XDG_CURRENT_DESKTOP': 'KDE'}, self.which('xfce4-terminal'), 'xfce4-terminal')[2], 'xfce4-terminal')
 
 class InstallerTests(unittest.TestCase):
+    def test_desktop_entry_patches_all_actions_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            target = home/'data/applications/org.kde.konsole.desktop'
+            target.parent.mkdir(parents=True)
+            original = '[Desktop Entry]\nType=Application\nName=Konsole\nExec="/usr/bin/konsole" %U\nActions=NewTab;\n\n[Desktop Action NewTab]\nName=New Tab\nExec=konsole --new-tab\n'
+            target.write_text(original)
+            before = []
+            with patch.dict(os.environ, {'XDG_DATA_HOME': str(home/'data')}):
+                setup.konsole_desktop_entry(home, lambda p: before.append(p.read_text()))
+                first = target.read_text()
+                setup.konsole_desktop_entry(home, lambda p: None)
+            self.assertEqual(target.read_text(), first)
+            self.assertEqual(first.count('--hide-toolbars'), 2)
+            self.assertIn('--hide-toolbars %U', first)
+            self.assertIn('--new-tab', first)
+            self.assertEqual(before, [original])
+            import shutil
+            if shutil.which('desktop-file-validate'):
+                subprocess.run(['desktop-file-validate', str(target)], check=True)
+
     def test_chrome_only_preserves_profile_font_and_opacity(self):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder)
@@ -47,14 +68,15 @@ class InstallerTests(unittest.TestCase):
             profile = home/'Personal.profile'; profile.write_text('Font=Personal\nOpacity=.4\n')
             layout = state/'konsolestaterc'; layout.write_text('[MainWindow]\nState=serialized\nWidth=900\n')
             saved = {}
-            with patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config), 'XDG_STATE_HOME': str(state)}):
-                setup.configure_konsole_chrome(home, lambda path: saved.setdefault(str(path), path.read_text()))
+            with patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config), 'XDG_STATE_HOME': str(state), 'XDG_DATA_HOME': str(home/'data'), 'XDG_DATA_DIRS': str(home/'system-data')}):
+                setup.configure_konsole_chrome(home, lambda path: saved.setdefault(str(path), path.read_text() if path.exists() else None))
             self.assertEqual(setup.read_ini(rc).get('Desktop Entry', 'DefaultProfile'), 'Personal.profile')
             self.assertEqual(setup.read_ini(rc).get('KonsoleWindow', 'RememberWindowSize'), 'true')
             self.assertNotIn('State=', rc.read_text())
             self.assertEqual(layout.read_text(), '[MainWindow]\nWidth=900\n')
             self.assertEqual(profile.read_text(), 'Font=Personal\nOpacity=.4\n')
             self.assertIn('State=serialized', saved[str(layout)])
+            self.assertIn('Exec=konsole --hide-menubar --hide-tabbar --hide-toolbars', (home/'data/applications/org.kde.konsole.desktop').read_text())
 
     def test_kconfig_edit_is_idempotent_and_keeps_nested_groups(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -120,6 +142,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertEqual(kde_state.read_text(), '[MainWindow]\nState=old-toolbar-layout\nWidth=1200\n')
                 self.assertFalse(profile.exists())
                 self.assertFalse((home / '.local/bin/terminal-kit').exists())
+                self.assertFalse((home / '.local/share/applications/org.kde.konsole.desktop').exists())
                 self.assertFalse((home / '.local/share/applications/terminal-kit.desktop').exists())
                 self.assertEqual(shell.read_text(), 'keep my shell\n')
 

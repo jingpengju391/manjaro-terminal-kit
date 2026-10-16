@@ -484,3 +484,19 @@ git pull --ff-only && bash install.sh
 若需要恢复到失败安装之前，请使用那次输出的 `python3 /备份目录/restore.py`。再次安装会新建备份，新的备份代表重试前状态，不是第一次失败前的状态。
 
 KDE 工具栏布局处理依据 [KMainWindow 的恢复顺序](https://github.com/KDE/kxmlgui/blob/master/src/kmainwindow.cpp)：序列化的 `State` 会在工具栏可见性设置之后加载，因此也需要处理该缓存。
+
+### Konsole 标题栏隐藏了，但“新建标签页 / 复制 / 粘贴”还在
+
+这些按钮属于工具栏。此前写入的 `Visible=Disabled` 不被当前 KToolBar 用于控制可见性，已移除。新版使用 Konsole 官方 `--hide-toolbars` 启动参数，并备份后更新用户级 `org.kde.konsole.desktop` 的主入口及新窗口/新标签页操作。系统级桌面文件不修改，恢复时用户级入口也会还原。
+
+```bash
+git pull --ff-only && bash install.sh --hide-chrome
+```
+
+按提示保存任务、关闭全部 Konsole 窗口；完成后新窗口会携带隐藏参数自动打开。以后可从应用菜单的 Konsole 或 Terminal Kit 打开。若桌面快捷方式是你单独复制的文件、或自己直接运行 `konsole`，它可能不经过这个入口，可明确运行：
+
+```bash
+konsole --separate --hide-menubar --hide-tabbar --hide-toolbars
+```
+
+依据：[KToolBar 的配置读取实现](https://github.com/KDE/kxmlgui/blob/master/src/ktoolbar.cpp)、[Konsole 官方启动选项](https://docs.kde.org/stable_kf6/en/konsole/konsole/command-line-options.html)。当前机器没有 Konsole，已检查官方实现及启动入口生成/恢复测试；实际 KDE 窗口仍需目标电脑验证。

@@ -116,7 +116,10 @@ def preflight(terminal):
         match = re.search(r'(\d+)\.(\d+)', version)
         if not match or tuple(map(int, match.groups())) < (21, 12):
             raise RuntimeError('Konsole 版本过旧或无法识别；此配置支持 Konsole 21.12 及以上。')
-        return {'help': run('konsole', '--help')}
+        help_text = run('konsole', '--help')
+        if '--hide-toolbars' not in help_text:
+            raise RuntimeError('此 Konsole 缺少 --hide-toolbars，请更新 Konsole 后再安装；未修改配置。')
+        return {'help': help_text}
     # Do not guess another GNOME terminal's schema or profile UUID.
     schemas = run('gsettings', 'list-schemas').splitlines()
     if 'org.gnome.Terminal.ProfilesList' not in schemas:
@@ -137,15 +140,38 @@ def preflight(terminal):
             'global_keys': set(run('gsettings', 'list-keys', 'org.gnome.Terminal.Legacy.Settings').splitlines())}
 
 
+def konsole_desktop_entry(home, keep):
+    """Use Konsole's supported CLI switches for normal desktop launches."""
+    target = data_path(home) / 'applications/org.kde.konsole.desktop'
+    candidates = [target] + [Path(folder)/'applications/org.kde.konsole.desktop'
+                            for folder in os.environ.get('XDG_DATA_DIRS', '/usr/local/share:/usr/share').split(':') if folder]
+    source = next((p for p in candidates if p.exists()), None)
+    text = source.read_text() if source else ('[Desktop Entry]\nType=Application\nName=Konsole\n'
+             'Exec=konsole\nIcon=utilities-terminal\nTerminal=false\nCategories=System;TerminalEmulator;\n')
+    output = []
+    for line in text.splitlines(keepends=True):
+        match = re.match(r'^(Exec=)("[^"\n]+"|[^ \t\n]+)(.*)$', line.rstrip('\n'))
+        if match and Path(match.group(2).strip('"')).name == 'konsole':
+            tail = match.group(3)
+            extra = ''.join(' ' + flag for flag in ['--hide-menubar', '--hide-tabbar', '--hide-toolbars'] if flag not in tail.split())
+            line = match.group(1) + match.group(2) + extra + tail + '\n'
+        output.append(line)
+    keep(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_symlink(): target.unlink()
+    target.write_text(''.join(output))
+
+
 def configure_konsole_chrome(home, keep):
     """Hide window chrome without touching fonts, profile, palette or opacity."""
     rc = config_path(home) / 'konsolerc'
     edit_ini(rc, {'KonsoleWindow': {'RemoveWindowTitleBarAndFrame': 'true'},
                  'MainWindow': {'MenuBar': 'Disabled'},
-                 'MainWindow][Toolbar mainToolBar': {'Visible': 'Disabled'},
-                 'MainWindow][Toolbar sessionToolbar': {'Visible': 'Disabled'},
                  'TabBar': {'TabBarVisibility': 'AlwaysHideTabBar'}}, keep,
-             remove={'MainWindow': {'State'}})
+             remove={'MainWindow': {'State'},
+                     'MainWindow][Toolbar mainToolBar': {'Visible'},
+                     'MainWindow][Toolbar sessionToolbar': {'Visible'}})
+    konsole_desktop_entry(home, keep)
     state = state_path(home) / 'konsolestaterc'
     if state.exists():
         edit_ini(state, {}, keep, remove={'MainWindow': {'State'}})

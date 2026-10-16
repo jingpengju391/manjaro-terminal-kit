@@ -154,6 +154,10 @@ try:
         vsdata['terminal.integrated.defaultProfile.linux'] = 'zsh'
         vsdata.setdefault('terminal.integrated.profiles.linux', {})['zsh'] = {'path': '/usr/bin/zsh'}
         vs.write_text(json.dumps(vsdata, ensure_ascii=False, indent=4) + '\n')
+    if terminal == 'konsole':
+        cache_tool = shutil.which('kbuildsycoca6') or shutil.which('kbuildsycoca5')
+        if cache_tool:
+            subprocess.run([cache_tool, '--noincremental'], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(['fc-cache', '-f'], check=True)
 except Exception:
     print('安装未完成。此前已修改项目的备份仍保留，恢复命令：\npython3 ' + str(backup / 'restore.py'))
@@ -167,5 +171,5 @@ if not a.terminal_only:
     print('已有 tmux 会话不会被关闭；新配置需在新会话或手动重新加载后使用。')
 
 if a.wait_konsole and terminal == 'konsole':
-    launch = ['konsole', '--separate'] if a.hide_chrome else [str(h / '.local/bin/terminal-kit')]
+    launch = ['konsole', '--separate', '--hide-menubar', '--hide-tabbar', '--hide-toolbars'] if a.hide_chrome else [str(h / '.local/bin/terminal-kit')]
     subprocess.Popen(launch, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
