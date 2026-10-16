@@ -32,16 +32,25 @@
 
 ## 2. 完整安装步骤
 
-### 第一步：复制安装包
+### 第一步：克隆仓库
 
-把 `manjaro-terminal-kit.tar.gz` 复制到目标电脑，例如放到 `~/Downloads/`。
-
-下面假设文件就在下载目录。如果放在其他目录，请先进入对应目录。
+在另一台 Manjaro 电脑上打开终端。如果没有 Git，先安装：
 
 ```bash
-cd ~/Downloads
-tar -xzf manjaro-terminal-kit.tar.gz
+sudo pacman -Syu --needed git
 ```
+
+克隆并进入仓库（下面以用户主目录为例）：
+
+```bash
+cd ~
+git clone https://github.com/jingpengju391/manjaro-terminal-kit.git
+cd manjaro-terminal-kit
+```
+
+**后面的安装命令都在仓库目录内执行**，因此使用 `bash install.sh`，不要再重复加 `manjaro-terminal-kit/`。如果仓库需要身份验证，请使用有访问权限的 GitHub 账号。
+
+如果已经克隆过，不要重复克隆，参照下方“后续更新”。如果你放在其他目录，请将 `~/manjaro-terminal-kit` 替换为实际路径。
 
 ### 第二步：安装系统依赖
 
@@ -58,7 +67,7 @@ sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-
 ### 第三步：检查环境
 
 ```bash
-bash manjaro-terminal-kit/install.sh --check
+bash install.sh --check
 ```
 
 显示“环境检查通过；未修改任何配置”后继续。缺少依赖时按提示安装；如果提示无法访问 XFCE 配置，请在目标电脑已登录的图形桌面中运行，并先打开一次 XFCE Terminal。
@@ -66,17 +75,18 @@ bash manjaro-terminal-kit/install.sh --check
 ### 第四步：安装配置
 
 ```bash
-bash manjaro-terminal-kit/install.sh
+bash install.sh
 ```
 
 安装会备份并替换现有 `.zshrc`、`.tmux.conf`、Starship 配置和同名用户工具，设置字体及 XFCE 终端外观。**已有 alias、NVM 等个人初始化不会自动合并**，需要从备份中按需取回。
 
 安装末尾会显示备份目录和完整回滚命令，建议保留这段输出。
 
-已经装齐依赖时，解压和安装也可以合并成一条命令：
+已安装 Git 和系统依赖、且尚未克隆仓库时，也可以连续执行：
 
 ```bash
-tar -xzf manjaro-terminal-kit.tar.gz && bash manjaro-terminal-kit/install.sh
+cd ~
+git clone https://github.com/jingpengju391/manjaro-terminal-kit.git && cd manjaro-terminal-kit && bash install.sh
 ```
 
 ### 第五步：启用 zsh
@@ -104,6 +114,33 @@ exec zsh
 5. 按 `Ctrl+反斜杠` 创建左右分屏，再用 `Alt+方向键` 切换。
 6. 按 `Ctrl+R` 搜索历史命令。
 
+### 后续更新
+
+进入此前克隆的仓库，拉取远程更新后重新应用配置：
+
+```bash
+cd ~/manjaro-terminal-kit
+git pull --ff-only
+bash install.sh --check
+bash install.sh
+```
+
+**`git pull` 只更新仓库文件，不会自动更新正在使用的终端配置。** 安装前检查 `git pull` 和 `--check` 是否成功；若失败，先解决报错，不要继续安装。每次安装都会生成一份新备份；重新安装会覆盖相关个人配置，先保存自己的定制。
+
+只更新原生终端外观时，最后一条改为：
+
+```bash
+bash install.sh --terminal-only
+```
+
+需要同时更新 VS Code 终端设置时，最后一条改为：
+
+```bash
+bash install.sh --vscode
+```
+
+如果 `git pull --ff-only` 提示本地改动或分支分叉，请先查看 `git status` 并保留自己的修改，不要直接执行强制重置。更新后新开终端；已有 tmux 分屏的 zsh 配置可在空闲提示符处用 `exec zsh` 重新加载。
+
 ## 3. VS Code 终端
 
 ### 自动配置
@@ -111,7 +148,7 @@ exec zsh
 如果还没安装，第四步可以改用：
 
 ```bash
-bash manjaro-terminal-kit/install.sh --vscode
+bash install.sh --vscode
 ```
 
 这个选项会合并以下设置：
@@ -304,7 +341,7 @@ fc-match 'MesloLGS NF'
 
 ### 安装出现校验失败
 
-`install.sh` 会校验包内文件。请重新解压原始压缩包后重试；手动编辑包内文件也会导致校验失败。安装后需要定制时，请修改用户目录里的配置文件。
+`install.sh` 会校验包内文件。先用 `git status --short` 检查仓库文件是否被改动，再用 `git pull --ff-only` 获取完整更新；手动编辑仓库内文件也会导致校验失败。不要为了通过校验直接丢弃未保存的修改。安装后需要定制时，请修改用户目录里的配置文件。
 
 ## 8. 配置文件与备份恢复
 
@@ -385,7 +422,8 @@ sudo pacman -Syu glibc python
 
 ```bash
 python3 -c 'import math; print("Python OK")'
-bash manjaro-terminal-kit/install.sh --check
+cd ~/manjaro-terminal-kit
+bash install.sh --check
 ```
 
 若升级失败，保留完整 pacman 输出，不要手动复制/替换 libm.so.6 或 libc.so.6。若升级成功但错误仍在，请提供 `pacman -Q glibc python`、`type -a python3` 和 `ldd --version` 的输出，以排查混源、环境变量或包文件异常。
@@ -397,7 +435,7 @@ bash manjaro-terminal-kit/install.sh --check
 `--check` **只检查环境，不修改任何外观**。完整安装本来就包含终端设置；也可以只应用终端外观：
 
 ```bash
-bash manjaro-terminal-kit/install.sh --terminal-only
+bash install.sh --terminal-only
 ```
 
 应用的项目：隐藏标题栏及窗口边框、菜单栏、工具栏和滚动条；默认窗口 120 列 × 24 行；透明背景深度 0.75；字体 MesloLGS NF 10。该选项不安装字体或修改 zsh/tmux，字体需先通过完整安装获得。
