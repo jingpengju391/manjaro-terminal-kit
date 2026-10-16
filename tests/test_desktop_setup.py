@@ -37,6 +37,25 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(setup.detect({'XDG_CURRENT_DESKTOP': 'KDE'}, self.which('xfce4-terminal'), 'xfce4-terminal')[2], 'xfce4-terminal')
 
 class InstallerTests(unittest.TestCase):
+    def test_chrome_only_preserves_profile_font_and_opacity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            config = home/'config'; config.mkdir()
+            state = home/'state'; state.mkdir()
+            rc = config/'konsolerc'
+            rc.write_text('[Desktop Entry]\nDefaultProfile=Personal.profile\n[KonsoleWindow]\nRememberWindowSize=true\n[MainWindow]\nState=cached-visible-toolbars\n')
+            profile = home/'Personal.profile'; profile.write_text('Font=Personal\nOpacity=.4\n')
+            layout = state/'konsolestaterc'; layout.write_text('[MainWindow]\nState=serialized\nWidth=900\n')
+            saved = {}
+            with patch.dict(os.environ, {'XDG_CONFIG_HOME': str(config), 'XDG_STATE_HOME': str(state)}):
+                setup.configure_konsole_chrome(home, lambda path: saved.setdefault(str(path), path.read_text()))
+            self.assertEqual(setup.read_ini(rc).get('Desktop Entry', 'DefaultProfile'), 'Personal.profile')
+            self.assertEqual(setup.read_ini(rc).get('KonsoleWindow', 'RememberWindowSize'), 'true')
+            self.assertNotIn('State=', rc.read_text())
+            self.assertEqual(layout.read_text(), '[MainWindow]\nWidth=900\n')
+            self.assertEqual(profile.read_text(), 'Font=Personal\nOpacity=.4\n')
+            self.assertIn('State=serialized', saved[str(layout)])
+
     def test_kconfig_edit_is_idempotent_and_keeps_nested_groups(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)/'konsolerc'
@@ -65,9 +84,12 @@ class InstallerTests(unittest.TestCase):
             rc = config / 'konsolerc'
             original = 'MenuBar=Disabled\n# keep root keys and comments\nRootKey=a=b\n[Desktop Entry]\nDefaultProfile=Personal.profile\n[Unrelated]\nKeep=hello\n'
             rc.write_text(original)
+            kde_state = home / 'state/konsolestaterc'
+            kde_state.parent.mkdir()
+            kde_state.write_text('[MainWindow]\nState=old-toolbar-layout\nWidth=1200\n')
             shell = home / '.zshrc'
             shell.write_text('keep my shell\n')
-            env = {'XDG_CONFIG_HOME': str(config), 'XDG_DATA_HOME': str(home / '.local/share'), 'XDG_CURRENT_DESKTOP': 'KDE', 'XDG_SESSION_TYPE': 'wayland'}
+            env = {'XDG_CONFIG_HOME': str(config), 'XDG_DATA_HOME': str(home / '.local/share'), 'XDG_STATE_HOME': str(home / 'state'), 'XDG_CURRENT_DESKTOP': 'KDE', 'XDG_SESSION_TYPE': 'wayland'}
             with patch.dict(os.environ, env), patch('pathlib.Path.home', return_value=home), \
                  patch('os.geteuid', return_value=1000), patch('shutil.which', side_effect=lambda n: '/usr/bin/' + n), \
                  patch('terminal_setup.preflight', return_value={'help': '--hide-toolbars'}), \
@@ -88,10 +110,14 @@ class InstallerTests(unittest.TestCase):
                 backups = list((home / '.local/state/manjaro-terminal-kit').iterdir())
                 self.assertEqual(len(backups), 1)
                 manifest = json.loads((backups[0] / 'manifest.json').read_text())
+                self.assertNotIn('State=', kde_state.read_text())
+                self.assertIn('Width=1200', kde_state.read_text())
                 self.assertFalse(manifest['properties'])
                 self.assertEqual(manifest['terminal'], 'konsole')
-                runpy.run_path(str(backups[0] / 'restore.py'), run_name='__main__')
+                with patch('sys.argv', ['restore.py', '--backup', str(backups[0])]):
+                    runpy.run_path(str(backups[0] / 'restore.py'), run_name='__main__')
                 self.assertEqual(rc.read_text(), original)
+                self.assertEqual(kde_state.read_text(), '[MainWindow]\nState=old-toolbar-layout\nWidth=1200\n')
                 self.assertFalse(profile.exists())
                 self.assertFalse((home / '.local/bin/terminal-kit').exists())
                 self.assertFalse((home / '.local/share/applications/terminal-kit.desktop').exists())

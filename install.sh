@@ -2,6 +2,18 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 sha256sum --quiet -c SHA256SUMS
+# Restoration must never install dependencies or reapply the theme.
+case "${1:-}" in
+  --restore)
+    exec python3 restore.py --backup "${2:-latest}"
+    ;;
+  --restore=*)
+    exec python3 restore.py --backup "${1#*=}"
+    ;;
+  --list-backups)
+    exec python3 restore.py --list
+    ;;
+esac
 bash bootstrap.sh "$@"
 # Validate the system interpreter before changing user configuration.
 if ! command -v python3 >/dev/null; then

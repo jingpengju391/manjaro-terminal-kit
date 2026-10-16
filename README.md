@@ -347,30 +347,51 @@ fc-match 'MesloLGS NF'
 
 ### 恢复安装前的配置
 
-每次安装都会创建独立备份目录：
+在更新后的仓库目录中操作（**旧备份内的旧 restore.py 不会随着 git pull 自动升级**）：
+
+```bash
+git pull --ff-only
+bash install.sh --list-backups
+```
+
+列表会标明备份是否包含 `.zshrc`。两种恢复目标：
+
+```bash
+# 仅撤销最近一次安装；最近一次可能只是外观修复，不包含 shell 皮肤
+bash install.sh --restore
+
+# 按时间倒序恢复全部现存备份，回到最早记录的状态
+bash install.sh --restore original
+```
+
+`original` 会覆盖这些备份涉及文件的后续修改。如果最早备份之前就已美化，或早期备份丢失，无法凭空还原更早的系统默认主题。
+
+也可明确指定某次备份：
+
+```bash
+bash install.sh --restore ~/.local/state/manjaro-terminal-kit/实际时间戳
+```
+
+**Konsole 正在运行时，安装和新版恢复会等待它关闭后再写入。** 先保存工作，再关闭所有 Konsole 窗口，不要注销桌面。后台最多等待 15 分钟，不会强制关闭任何窗口；完成信息分别记录在：
 
 ```text
-~/.local/state/manjaro-terminal-kit/时间戳/
-├── files/          原文件备份
-├── manifest.json   本次修改记录
-└── restore.py      本次回滚脚本
+~/.local/state/manjaro-terminal-kit/apply-after-close.log
+~/.local/state/manjaro-terminal-kit/restore-after-close.log
 ```
 
-查看已有备份：
+完成后会自动打开一个新的 Konsole。若没有出现，可用文件管理器查看日志中的“配置已保存”或“恢复完成”。如果超时，没有进行这次写入，需要重新执行。后台等待期间不要再同时执行另一条安装或恢复命令。
+
+恢复后请先在 **新开的终端、tmux 外** 检查皮肤。已有 zsh 的提示符和 tmux 状态栏保存在进程内，不会随配置文件回退自动改变。脚本不终止工作会话，也不修改通过 `chsh` 设置的登录 shell。
+
+### 恢复皮肤后仍想隐藏红框的窗口栏
+
+恢复原样会带回原有标题栏/工具栏，这是恢复行为，不是隐藏操作。若只想去掉 Konsole 的窗口栏，保留当前原生配色、透明度、字体及提示符：
 
 ```bash
-ls -1 ~/.local/state/manjaro-terminal-kit/
+bash install.sh --hide-chrome
 ```
 
-然后使用**安装完成时输出的完整回滚命令**，或将下面的 `实际时间戳` 替换为对应目录名：
-
-```bash
-python3 ~/.local/state/manjaro-terminal-kit/实际时间戳/restore.py
-```
-
-恢复后重新打开终端。回滚会覆盖安装后对相关配置的修改，先保存想保留的内容；它不会终止已运行的 tmux 程序，也不会恢复通过 `chsh` 手动修改的登录 shell。
-
-重复安装时，最新备份保存的是“最近一次安装之前”的状态；要恢复最初的配置，应找到第一次安装的备份。
+此操作也会备份，且等所有 Konsole 窗口关闭后应用。它只处理标题栏、边框、菜单、工具栏、标签栏及旧布局缓存，不重装皮肤。不要用 `--terminal-only` 替代它：`--terminal-only` 仍会更换终端配色、字体、透明度和尺寸。
 
 ## 9. 适用范围与验证情况
 
@@ -432,18 +453,18 @@ bash install.sh --terminal-only
 
 ### 为什么 KDE 旧窗口没变化
 
-Konsole 进程可能缓存设置，在退出时写回旧状态。先保存工作，再关闭旧 Konsole 窗口，必要时重新应用；也可以先用 `~/.local/bin/terminal-kit` 打开独立窗口验证。不要为了更新外观强制杀掉承载工作任务的进程。GNOME Headerbar 设置同样可能需要保存任务后重启终端服务。
+Konsole 进程会缓存配置，KDE 还可能从 `konsolestaterc` 恢复工具栏布局。新版会备份并清理相关 `State` 布局键，并在所有 Konsole 窗口关闭后应用，避免旧进程写回覆盖。GNOME Headerbar 设置同样可能需要保存任务后重启终端服务。
 
 ### 备份与恢复的范围
 
-所有将被修改的文件都会在写入前备份；原来不存在的文件会记录为新建，恢复时删除。支持 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` 自定义目录。
+所有将被修改的文件都会在写入前备份；原来不存在的文件会记录为新建，恢复时删除。支持 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` 自定义目录；KDE 布局状态同时遵循 `XDG_STATE_HOME`。
 
 - **KDE**：`konsolerc`、Terminal Kit profile/colorscheme、字体和 `terminal-kit` 启动脚本。
 - **Xfce**：逐项保存 xfconf 原值，或备份旧版 terminalrc；另保存字体及启动脚本。
 - **GNOME**：逐项备份 dconf 原始用户值，恢复时写回原值或恢复为系统默认；另保存字体及启动脚本。
 - **完整安装**：还会备份 zsh/tmux/Starship 配置及被替换的工具。
 
-安装会打印具体备份目录以及 `python3 /备份目录/restore.py`。恢复脚本只恢复这次记录的项目，不会把 KDE 配置当成 XFCE 设置恢复。既有旧版备份脚本仍保留其原有能力。
+安装会打印具体备份目录以及 `python3 /备份目录/restore.py`。指定备份时仅恢复该次项目；`--restore original` 则倒序应用全部现存备份。旧备份请优先用更新后仓库的恢复入口处理。
 
 ### 配置依据
 
@@ -461,3 +482,5 @@ git pull --ff-only && bash install.sh
 ```
 
 若需要恢复到失败安装之前，请使用那次输出的 `python3 /备份目录/restore.py`。再次安装会新建备份，新的备份代表重试前状态，不是第一次失败前的状态。
+
+KDE 工具栏布局处理依据 [KMainWindow 的恢复顺序](https://github.com/KDE/kxmlgui/blob/master/src/kmainwindow.cpp)：序列化的 `State` 会在工具栏可见性设置之后加载，因此也需要处理该缓存。

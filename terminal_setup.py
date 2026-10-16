@@ -44,6 +44,10 @@ def config_path(home):
     return Path(os.environ.get('XDG_CONFIG_HOME', str(home / '.config')))
 
 
+def state_path(home):
+    return Path(os.environ.get('XDG_STATE_HOME', str(home / '.local/state')))
+
+
 def data_path(home):
     return Path(os.environ.get('XDG_DATA_HOME', str(home / '.local/share')))
 
@@ -58,9 +62,10 @@ def read_ini(path):
     return cfg
 
 
-def edit_ini(path, changes, keep):
+def edit_ini(path, changes, keep, remove=None):
     """Patch only owned keys, preserving KConfig root entries and comments."""
     original = path.read_text() if path.exists() else ''
+    remove = remove or {}
     pending = {group: dict(values) for group, values in changes.items()}
     output = []
     group = None
@@ -76,9 +81,11 @@ def edit_ini(path, changes, keep):
         if header:
             flush()
             group = header.group(1)
-        elif group in changes and '=' in line and not line.lstrip().startswith(('#', ';')):
+        elif '=' in line and not line.lstrip().startswith(('#', ';')):
             key = line.split('=', 1)[0].strip()
-            if key in changes[group]:
+            if key in remove.get(group, set()):
+                continue
+            if key in changes.get(group, {}):
                 output.append(f'{key}={changes[group][key]}\n')
                 pending[group].pop(key, None)
                 continue
@@ -130,6 +137,20 @@ def preflight(terminal):
             'global_keys': set(run('gsettings', 'list-keys', 'org.gnome.Terminal.Legacy.Settings').splitlines())}
 
 
+def configure_konsole_chrome(home, keep):
+    """Hide window chrome without touching fonts, profile, palette or opacity."""
+    rc = config_path(home) / 'konsolerc'
+    edit_ini(rc, {'KonsoleWindow': {'RemoveWindowTitleBarAndFrame': 'true'},
+                 'MainWindow': {'MenuBar': 'Disabled'},
+                 'MainWindow][Toolbar mainToolBar': {'Visible': 'Disabled'},
+                 'MainWindow][Toolbar sessionToolbar': {'Visible': 'Disabled'},
+                 'TabBar': {'TabBarVisibility': 'AlwaysHideTabBar'}}, keep,
+             remove={'MainWindow': {'State'}})
+    state = state_path(home) / 'konsolestaterc'
+    if state.exists():
+        edit_ini(state, {}, keep, remove={'MainWindow': {'State'}})
+
+
 def configure(terminal, info, home, props, keep, manifest, save):
     notes = []
     if terminal == 'xfce4-terminal':
@@ -151,12 +172,9 @@ def configure(terminal, info, home, props, keep, manifest, save):
         notes.append('已写入 XFCE：隐藏标题栏/边框、菜单栏、工具栏、滚动条；120×24；透明背景深度 0.75。')
     elif terminal == 'konsole':
         rc = config_path(home) / 'konsolerc'
+        configure_konsole_chrome(home, keep)
         edit_ini(rc, {'Desktop Entry': {'DefaultProfile': 'TerminalKit.profile'},
-                     'KonsoleWindow': {'RemoveWindowTitleBarAndFrame': 'true', 'RememberWindowSize': 'false'},
-                     'MainWindow': {'MenuBar': 'Disabled'},
-                     'MainWindow][Toolbar mainToolBar': {'Visible': 'Disabled'},
-                     'MainWindow][Toolbar sessionToolbar': {'Visible': 'Disabled'},
-                     'TabBar': {'TabBarVisibility': 'AlwaysHideTabBar'}}, keep)
+                      'KonsoleWindow': {'RememberWindowSize': 'false'}}, keep)
         folder = data_path(home) / 'konsole'
         edit_ini(folder / 'TerminalKit.profile', {
             'General': {'Name': 'Terminal Kit', 'Parent': 'FALLBACK/', 'TerminalColumns': '120', 'TerminalRows': '24'},
@@ -174,7 +192,7 @@ def configure(terminal, info, home, props, keep, manifest, save):
         else:
             notes.append('此 Konsole 不提供 --hide-toolbars；已写入工具栏可见性配置，需新窗口验证。')
         notes.append('已写入 Konsole 专用配置：默认 Terminal Kit profile；无标题栏/边框；隐藏菜单/标签/工具栏/滚动条；120×24；背景不透明度 75%。')
-        notes.append('KDE 配置文件已保存；已有 Konsole 进程可能保留或在退出时写回旧状态。保存任务、关闭旧窗口后重新应用，或先用 terminal-kit 打开独立窗口验证。')
+        notes.append('已备份并移除 Konsole 的旧工具栏布局状态；请用 terminal-kit 打开新窗口验证。')
     else:
         def setting(schema, key, value, path):
             if run('gsettings', 'writable', schema, key) != 'true':

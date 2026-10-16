@@ -9,13 +9,18 @@ import platform
 import shutil
 import subprocess
 import terminal_setup
+import konsole_guard
+import sys
 
 ap = argparse.ArgumentParser()
+ap.add_argument('--wait-konsole', action='store_true', help=argparse.SUPPRESS)
 ap.add_argument('--check', action='store_true', help='Read-only environment and target check')
 ap.add_argument('--vscode', action='store_true', help='Merge VS Code terminal font/profile')
+ap.add_argument('--hide-chrome', action='store_true', help='只隐藏 Konsole 窗口栏，保留原皮肤、字体、透明度')
 ap.add_argument('--terminal-only', action='store_true', help='Apply terminal appearance and font only')
 ap.add_argument('--terminal', choices=['auto', 'konsole', 'xfce4-terminal', 'gnome-terminal'], default='auto')
 a = ap.parse_args()
+a.terminal_only = a.terminal_only or a.hide_chrome
 if os.geteuid() == 0:
     raise SystemExit('请用普通桌面用户运行，不要 sudo bash install.sh。')
 if platform.machine() != 'x86_64':
@@ -29,6 +34,8 @@ try:
     desktop, session, terminal = terminal_setup.detect(requested=a.terminal)
 except RuntimeError as e:
     raise SystemExit(str(e))
+if a.hide_chrome and terminal != 'konsole':
+    raise SystemExit('--hide-chrome 目前仅用于 Konsole。')
 print(f'桌面：{desktop}；显示会话：{session}；目标终端：{terminal}')
 print('目标按桌面默认终端选择；若你使用其他终端，请用 --terminal 明确指定。')
 required = ['python3', terminal, 'fc-cache']
@@ -72,9 +79,16 @@ if a.vscode:
 if a.check:
     print('检查通过；仅验证环境，不写入或备份配置。去掉 --check 才会应用。')
     raise SystemExit()
+if terminal == 'konsole':
+    if a.wait_konsole:
+        konsole_guard.wait_until_closed()
+    elif konsole_guard.running():
+        log = h / '.local/state/manjaro-terminal-kit/apply-after-close.log'
+        konsole_guard.defer(Path(__file__).resolve(), sys.argv[1:], log)
+        raise SystemExit()
 backup = h / '.local/state/manjaro-terminal-kit' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
 backup.mkdir(parents=True)
-manifest = {'files': [], 'properties': [], 'dconf': [], 'desktop': desktop, 'terminal': terminal}
+manifest = {'files': [], 'properties': [], 'dconf': [], 'desktop': desktop, 'terminal': terminal, 'scope': 'chrome-only' if a.hide_chrome else 'terminal-only' if a.terminal_only else 'full'}
 
 def save():
     (backup / 'manifest.json').write_text(json.dumps(manifest, indent=2))
@@ -99,18 +113,23 @@ def copy(src, dst):
     shutil.copy2(src, dst)
 
 shutil.copy2(base / 'restore.py', backup / 'restore.py')
+shutil.copy2(base / 'konsole_guard.py', backup / 'konsole_guard.py')
 save()
 print('备份目录：' + str(backup))
 try:
     # Fonts are needed for terminal-only too.
-    for src in (p / 'fonts').iterdir():
+    for src in ([] if a.hide_chrome else (p / 'fonts').iterdir()):
         copy(src, terminal_setup.data_path(h) / 'fonts/terminal-kit' / src.name)
     if not a.terminal_only:
         for src, dst in [(p / 'zshrc', h / '.zshrc'), (p / 'tmux.conf', h / '.tmux.conf'), (p / 'starship.toml', terminal_setup.config_path(h) / 'starship.toml')]:
             copy(src, dst)
         for folder, target in [('bin', '.local/bin'), ('libexec', '.local/libexec')]:
             for src in (p / folder).iterdir(): copy(src, h / target / src.name)
-    notes = terminal_setup.configure(terminal, info, h, json.loads((p / 'terminal.json').read_text()), keep, manifest, save)
+    if a.hide_chrome:
+        terminal_setup.configure_konsole_chrome(h, keep)
+        notes = ['已仅隐藏 Konsole 标题栏、边框、菜单栏、工具栏和标签栏；未更换皮肤、字体或透明度。']
+    else:
+        notes = terminal_setup.configure(terminal, info, h, json.loads((p / 'terminal.json').read_text()), keep, manifest, save)
     if not a.terminal_only:
         # The dedicated launcher starts zsh without changing the account login shell.
         launcher = h / '.local/bin/terminal-kit'
@@ -140,9 +159,13 @@ except Exception:
     print('安装未完成。此前已修改项目的备份仍保留，恢复命令：\npython3 ' + str(backup / 'restore.py'))
     raise
 print('\n'.join(notes))
-print('配置已保存；不是对现有窗口外观的验证。用 ~/.local/bin/terminal-kit 打开新窗口查看。')
+print('配置已保存，请新开 Konsole 查看。' if a.hide_chrome else '配置已保存；不是对现有窗口外观的验证。用 ~/.local/bin/terminal-kit 打开新窗口查看。')
 print('恢复命令：\npython3 ' + str(backup / 'restore.py'))
 if not a.terminal_only:
     print('从应用菜单打开 Terminal Kit，或执行 ~/.local/bin/terminal-kit，即可使用配置好的 zsh。')
     print('可选：chsh -s /usr/bin/zsh 更改账户默认 shell，重新登录后生效。')
     print('已有 tmux 会话不会被关闭；新配置需在新会话或手动重新加载后使用。')
+
+if a.wait_konsole and terminal == 'konsole':
+    launch = ['konsole', '--separate'] if a.hide_chrome else [str(h / '.local/bin/terminal-kit')]
+    subprocess.Popen(launch, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

@@ -8,7 +8,7 @@ args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
   case "${args[i]}" in
     --check|--help|-h) check=true ;;
-    --terminal-only) terminal_only=true ;;
+    --terminal-only|--hide-chrome) terminal_only=true ;;
     --terminal=*) terminal=${args[i]#*=} ;;
     --terminal)
       ((i+=1))
