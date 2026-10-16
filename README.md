@@ -48,7 +48,7 @@ tar -xzf manjaro-terminal-kit.tar.gz
 如果目标电脑已装齐依赖，可以直接进入下一步。否则执行：
 
 ```bash
-sudo pacman -S --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3
+sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3
 ```
 
 依赖安装需要网络和管理员密码。主题、字体、Starship、fzf 和 tmux 已打包，不需要再次下载。
@@ -370,3 +370,44 @@ python3 ~/.local/state/manjaro-terminal-kit/实际时间戳/restore.py
 选中文字显示蓝底白字，松开鼠标会复制并保留选区；按 `Esc` 返回命令行。
 
 若能复制但拖动时没有高亮，检查 `copy-mode-selection-style`。本配置为 tmux 3.7 显式指定蓝底白字，不仅设置 `mode-style`。
+
+### 检查时出现 GLIBC_x.xx not found / Python ImportError
+
+如果报错指向 `/usr/lib/python3.x/lib-dynload/math...so` 和 `/usr/lib/libm.so.6`，这是目标电脑的系统 Python 与 glibc 不匹配，而非主题配置错误。常见原因包括部分升级或混用软件源，不能仅凭该报错确定具体来源。
+
+在目标电脑运行完整升级并重装匹配的软件包（会升级系统软件）：
+
+```bash
+sudo pacman -Syu glibc python
+```
+
+成功后重启，再检查：
+
+```bash
+python3 -c 'import math; print("Python OK")'
+bash manjaro-terminal-kit/install.sh --check
+```
+
+若升级失败，保留完整 pacman 输出，不要手动复制/替换 libm.so.6 或 libc.so.6。若升级成功但错误仍在，请提供 `pacman -Q glibc python`、`type -a python3` 和 `ldd --version` 的输出，以排查混源、环境变量或包文件异常。
+
+依据：[Manjaro Pacman 官方说明](https://wiki.manjaro.org/index.php?title=Pacman_Overview/en)。
+
+## 单独应用原生 XFCE 终端外观
+
+`--check` **只检查环境，不修改任何外观**。完整安装本来就包含终端设置；也可以只应用终端外观：
+
+```bash
+bash manjaro-terminal-kit/install.sh --terminal-only
+```
+
+应用的项目：隐藏标题栏及窗口边框、菜单栏、工具栏和滚动条；默认窗口 120 列 × 24 行；透明背景深度 0.75；字体 MesloLGS NF 10。该选项不安装字体或修改 zsh/tmux，字体需先通过完整安装获得。
+
+安装器识别 XFCE Terminal 版本：1.1 及以上通过 xfconf 设置，旧版写入 terminalrc。修改前均备份，可用该次生成的 restore.py 恢复。
+
+旧窗口可能保留创建时的标题栏/菜单状态。请新开一个窗口验证：
+
+```bash
+xfce4-terminal --disable-server --hide-menubar --hide-toolbar --hide-borders
+```
+
+不要为了刷新外观强制关闭有任务的终端。透明效果依赖 XFCE 合成器；这些设置只适用于 XFCE Terminal，不会隐藏 VS Code 的应用标题栏。
