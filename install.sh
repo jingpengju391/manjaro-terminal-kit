@@ -2,7 +2,8 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 sha256sum --quiet -c SHA256SUMS
-# Validate the system interpreter before any installer mutation.
+bash bootstrap.sh "$@"
+# Validate the system interpreter before changing user configuration.
 if ! command -v python3 >/dev/null; then
   echo '缺少 Python。请先执行 sudo pacman -Syu python，再重试。' >&2
   exit 1

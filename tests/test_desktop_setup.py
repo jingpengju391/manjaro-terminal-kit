@@ -38,6 +38,12 @@ class DetectionTests(unittest.TestCase):
 
 class InstallerTests(unittest.TestCase):
     def test_kde_install_backup_restore_roundtrip(self):
+        self.kde_roundtrip(terminal_only=True)
+
+    def test_full_install_launcher_and_restore(self):
+        self.kde_roundtrip(terminal_only=False)
+
+    def kde_roundtrip(self, terminal_only):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder)
             config = home / '.config'
@@ -52,11 +58,15 @@ class InstallerTests(unittest.TestCase):
                  patch('os.geteuid', return_value=1000), patch('shutil.which', side_effect=lambda n: '/usr/bin/' + n), \
                  patch('terminal_setup.preflight', return_value={'help': '--hide-toolbars'}), \
                  patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0)), \
-                 patch('sys.argv', ['install.py', '--terminal-only', '--terminal', 'konsole']), contextlib.redirect_stdout(io.StringIO()):
+                 patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else [])), contextlib.redirect_stdout(io.StringIO()):
                 runpy.run_path(str(ROOT / 'install.py'), run_name='__main__')
                 self.assertEqual(setup.read_ini(rc).get('Unrelated', 'Keep'), 'hello')
                 self.assertEqual(setup.read_ini(rc).get('KonsoleWindow', 'RemoveWindowTitleBarAndFrame'), 'true')
-                self.assertEqual(shell.read_text(), 'keep my shell\n')
+                if terminal_only:
+                    self.assertEqual(shell.read_text(), 'keep my shell\n')
+                else:
+                    self.assertIn(' -e zsh', (home / '.local/bin/terminal-kit').read_text())
+                    self.assertIn('Name=Terminal Kit', (home / '.local/share/applications/terminal-kit.desktop').read_text())
                 profile = home / '.local/share/konsole/TerminalKit.profile'
                 self.assertEqual(setup.read_ini(profile).get('Scrolling', 'ScrollBarPosition'), '2')
                 backups = list((home / '.local/state/manjaro-terminal-kit').iterdir())
@@ -68,6 +78,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertEqual(rc.read_text(), original)
                 self.assertFalse(profile.exists())
                 self.assertFalse((home / '.local/bin/terminal-kit').exists())
+                self.assertFalse((home / '.local/share/applications/terminal-kit.desktop').exists())
                 self.assertEqual(shell.read_text(), 'keep my shell\n')
 
     def test_gnome_records_dconf_before_writing_and_reports_limitations(self):

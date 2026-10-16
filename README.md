@@ -14,7 +14,7 @@
 | Xfce | XFCE Terminal | 1.1+ 用 xfconf；旧版用 terminalrc |
 | GNOME | GNOME Terminal | 默认 profile 的 GSettings/dconf |
 
-只有 Ptyxis 或 GNOME Console（kgx）时会停止并提示，**不会把它们当作 GNOME Terminal**。未知桌面或无法识别目标时要求显式选择，不会盲写 XFCE 配置。
+默认安装会为 GNOME 补装 GNOME Terminal；只检查时若仅有 Ptyxis 或 GNOME Console（kgx），会提示缺少支持的终端，**不会把它们当作 GNOME Terminal**。未知桌面或无法识别目标时要求显式选择，不会盲写 XFCE 配置。
 
 | 外观项目 | Konsole | XFCE Terminal | GNOME Terminal |
 | --- | --- | --- | --- |
@@ -55,98 +55,47 @@
 
 ## 2. 完整安装步骤
 
-### 第一步：克隆仓库
+### 新电脑：克隆后运行一条安装命令
 
-在另一台 Manjaro 电脑上打开终端。如果没有 Git，先安装：
-
-```bash
-sudo pacman -Syu --needed git
-```
-
-克隆并进入仓库（下面以用户主目录为例）：
+在目标电脑已登录的图形桌面中打开终端：
 
 ```bash
-cd ~
 git clone https://github.com/jingpengju391/manjaro-terminal-kit.git
 cd manjaro-terminal-kit
+bash install.sh
 ```
 
-**后面的安装命令都在仓库目录内执行**，因此使用 `bash install.sh`，不要再重复加 `manjaro-terminal-kit/`。如果仓库需要身份验证，请使用有访问权限的 GitHub 账号。
+**不需要自己判断 KDE / Xfce / GNOME，也不需要填写 `--terminal`。** 安装器会：
 
-如果已经克隆过，不要重复克隆，参照下方“后续更新”。如果你放在其他目录，请将 `~/manjaro-terminal-kit` 替换为实际路径。
+1. 自动识别桌面和 X11 / Wayland，选择对应终端。
+2. 检查依赖，缺少时调用 `sudo pacman -Syu --needed` 补齐。系统会要求密码及确认；该操作包含系统完整升级，取消即停止安装。
+3. 检查终端配置接口，在修改用户配置前生成备份。
+4. 应用对应终端外观、字体、Starship、fzf、tmux 和快捷键。
+5. 创建应用菜单中的 **Terminal Kit**，打开即可进入配置好的 zsh。
 
-### 第二步：安装系统依赖
+如果没有 Git，先运行 `sudo pacman -Syu --needed git`。如果仓库要求身份验证，请使用有访问权限的 GitHub 账号。**不要执行 `sudo bash install.sh`**。
 
-先安装公共依赖（会完整升级系统）：
+安装结束后，从应用菜单打开 **Terminal Kit**，或者运行：
 
 ```bash
-sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting python fontconfig
+~/.local/bin/terminal-kit
 ```
 
-根据桌面选择下面一条，**不要全部安装**：
+在新窗口按 `Ctrl+T` 进入 work，按 `Ctrl+N` 新建窗口，按 `Ctrl+左/右` 切换窗口。按 `Ctrl+反斜杠` 左右分屏，按 `Alt+方向键` 切换分屏。
 
-```bash
-# KDE Plasma
-sudo pacman -Syu --needed konsole
-# Xfce
-sudo pacman -Syu --needed xfce4-terminal xfconf
-# GNOME：需要 GNOME Terminal，Ptyxis/Console 暂不支持
-sudo pacman -Syu --needed gnome-terminal glib2 dconf
-```
+这个入口会直接启动 zsh，无须更改账户默认 shell。若希望其他终端入口也默认使用 zsh，可选执行 `chsh -s /usr/bin/zsh`，然后注销并重新登录。
 
-Wayland 会话还需要 `sudo pacman -Syu --needed wl-clipboard`；X11 会话需要 `sudo pacman -Syu --needed libxmu`。检查命令会列出缺失依赖。字体、Starship、fzf、tmux 和 X11 xclip 已包含在仓库中。
+> 安装会备份并替换现有 `.zshrc`、`.tmux.conf`、Starship 配置和同名用户工具。已有 alias、NVM 等个人初始化不会自动合并，可从备份中取回。安装末尾显示备份位置和恢复命令。系统包升级不属于配置备份的恢复范围。
 
-> `sudo` 只用于上面的系统依赖安装。**不要执行 `sudo bash install.sh`**，否则会把配置安装给错误的用户，脚本也会拒绝运行。
-
-### 第三步：检查环境
+### 可选：只检查，不安装
 
 ```bash
 bash install.sh --check
 ```
 
-显示“检查通过；仅验证环境，不写入或备份配置”后继续。缺少依赖时按提示安装；如果提示无法访问配置服务，请在目标电脑已登录的图形桌面中运行，并先打开一次对应终端。
+该命令不安装依赖、不写入配置，也不生成备份。普通迁移不需要单独运行它；默认安装自带检查。Python/GLIBC 损坏时会停止并给出修复提示，不会强行替换系统库。
 
-### 第四步：安装配置
-
-```bash
-bash install.sh
-```
-
-安装会备份并替换现有 `.zshrc`、`.tmux.conf`、Starship 配置和同名用户工具，设置字体及检测到的原生终端外观。**已有 alias、NVM 等个人初始化不会自动合并**，需要从备份中按需取回。
-
-安装末尾会显示备份目录和完整回滚命令，建议保留这段输出。
-
-已安装 Git 和系统依赖、且尚未克隆仓库时，也可以连续执行：
-
-```bash
-cd ~
-git clone https://github.com/jingpengju391/manjaro-terminal-kit.git && cd manjaro-terminal-kit && bash install.sh
-```
-
-### 第五步：启用 zsh
-
-将 zsh 设置为今后的默认登录 shell：
-
-```bash
-chsh -s /usr/bin/zsh
-```
-
-输入用户密码，然后**注销桌面并重新登录**。如果只想先在当前终端体验，执行：
-
-```bash
-exec zsh
-```
-
-`exec zsh` 只替换当前 shell，不会永久更改默认登录 shell。请在命令执行结束、回到提示符时操作。
-
-### 第六步：试用
-
-1. 输入 `cd` 或 `clear`，观察灰薄荷绿命令高亮。
-2. 按 `Ctrl+T`，进入名为 `work` 的 tmux 会话。
-3. 按 `Ctrl+N` 新建一个窗口。
-4. 按 `Ctrl+左/右` 切换窗口。
-5. 按 `Ctrl+反斜杠` 创建左右分屏，再用 `Alt+方向键` 切换。
-6. 按 `Ctrl+R` 搜索历史命令。
+自动选择 KDE 的 Konsole、Xfce 的 XFCE Terminal、GNOME 的 GNOME Terminal；缺少对应终端时会安装。GNOME 的 Ptyxis/Console 不会被修改。未知桌面或使用其他终端时，才需要手动指定 `--terminal`，详见文末高级用法。不同终端的能力限制仍以开头表格为准。
 
 ### 后续更新
 
@@ -154,12 +103,10 @@ exec zsh
 
 ```bash
 cd ~/manjaro-terminal-kit
-git pull --ff-only
-bash install.sh --check
-bash install.sh
+git pull --ff-only && bash install.sh
 ```
 
-**`git pull` 只更新仓库文件，不会自动更新正在使用的终端配置。** 安装前检查 `git pull` 和 `--check` 是否成功；若失败，先解决报错，不要继续安装。每次安装都会生成一份新备份；重新安装会覆盖相关个人配置，先保存自己的定制。
+**`git pull` 只更新仓库文件，不会自动更新正在使用的终端配置。** 更新成功后安装器自动检查环境；检查失败会停止。每次安装都会生成一份新备份；重新安装会覆盖相关个人配置，先保存自己的定制。
 
 只更新原生终端外观及字体时，最后一条改为：
 
@@ -179,7 +126,7 @@ bash install.sh --vscode
 
 ### 自动配置
 
-如果还没安装，第四步可以改用：
+如果还没安装，安装命令可以改用：
 
 ```bash
 bash install.sh --vscode
@@ -393,7 +340,8 @@ fc-match 'MesloLGS NF'
 | `~/.config/konsolerc`、`~/.local/share/konsole/TerminalKit.*` | KDE Konsole 外观及专用 profile |
 | XFCE 的 `xfce4-terminal` 配置通道或旧版 terminalrc | XFCE 外观设置 |
 | GNOME Terminal 的 dconf 配置 | 字体、尺寸、滚动条及支持的外观项 |
-| `~/.local/bin/terminal-kit` | 用目标终端专用参数打开新窗口 |
+| `~/.local/bin/terminal-kit` | 用目标终端专用参数打开新窗口；完整安装时启动 zsh |
+| `~/.local/share/applications/terminal-kit.desktop` | 完整安装的应用菜单入口 |
 | `~/.local/libexec/tmux-clipboard` | 按 X11 / Wayland 选择剪贴板工具 |
 | `~/.config/Code/User/settings.json` | 仅 `--vscode` 时修改 |
 
@@ -468,18 +416,17 @@ bash install.sh --check
 
 依据：[Manjaro Pacman 官方说明](https://wiki.manjaro.org/index.php?title=Pacman_Overview/en)。
 
-## 单独应用原生终端外观（推荐用于修复已有安装）
+## 单独应用原生终端外观与高级用法
 
 在另一台电脑的仓库目录中执行。KDE 示例：
 
 ```bash
 git pull --ff-only
-bash install.sh --terminal konsole --terminal-only --check
-bash install.sh --terminal konsole --terminal-only
+bash install.sh --terminal-only
 ~/.local/bin/terminal-kit
 ```
 
-Xfce 将 `konsole` 改为 `xfce4-terminal`；GNOME 将其改为 `gnome-terminal`。省略 `--terminal` 时自动按桌面选择。`--check` 只检查，不修改和备份；真正应用时才创建备份。
+默认自动按桌面选择，无须额外参数。仅需覆盖自动结果时使用 `--terminal konsole`、`--terminal xfce4-terminal` 或 `--terminal gnome-terminal`。`--check` 只检查，不修改和备份；真正应用时才创建备份。
 
 `--terminal-only` 会配置原生终端并安装配套字体，不修改 zsh/tmux。KDE 会创建独立的 `TerminalKit.profile` 与 `TerminalKit.colorscheme`，切换 Konsole 默认 profile，并保存菜单、工具栏、标题栏等默认选项；不修改全局 KWin 主题。
 

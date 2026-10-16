@@ -111,6 +111,23 @@ try:
         for folder, target in [('bin', '.local/bin'), ('libexec', '.local/libexec')]:
             for src in (p / folder).iterdir(): copy(src, h / target / src.name)
     notes = terminal_setup.configure(terminal, info, h, json.loads((p / 'terminal.json').read_text()), keep, manifest, save)
+    if not a.terminal_only:
+        # The dedicated launcher starts zsh without changing the account login shell.
+        launcher = h / '.local/bin/terminal-kit'
+        suffix = ' -- zsh' if terminal == 'gnome-terminal' else ' -e zsh'
+        launcher.write_text(launcher.read_text().replace(' "$@"', suffix + ' "$@"'))
+        desktop_file = terminal_setup.data_path(h) / 'applications/terminal-kit.desktop'
+        keep(desktop_file)
+        desktop_file.parent.mkdir(parents=True, exist_ok=True)
+        if desktop_file.is_symlink(): desktop_file.unlink()
+        executable = str(launcher)
+        for char in ['\\', '"', '`', '$']:
+            executable = executable.replace(char, '\\' + char)
+        executable = executable.replace('%', '%%')
+        desktop_file.write_text('[Desktop Entry]\nType=Application\nName=Terminal Kit\n'
+                                'Comment=Open the configured terminal and zsh\n'
+                                f'Exec="{executable}"\nIcon=utilities-terminal\n'
+                                'Terminal=false\nCategories=System;TerminalEmulator;\n')
     if vsdata is not None:
         keep(vs)
         vs.parent.mkdir(parents=True, exist_ok=True)
@@ -126,5 +143,6 @@ print('\n'.join(notes))
 print('配置已保存；不是对现有窗口外观的验证。用 ~/.local/bin/terminal-kit 打开新窗口查看。')
 print('恢复命令：\npython3 ' + str(backup / 'restore.py'))
 if not a.terminal_only:
-    print('用 chsh -s /usr/bin/zsh 设置默认 shell 后重新登录；当前空闲 shell 可执行 exec zsh。')
+    print('从应用菜单打开 Terminal Kit，或执行 ~/.local/bin/terminal-kit，即可使用配置好的 zsh。')
+    print('可选：chsh -s /usr/bin/zsh 更改账户默认 shell，重新登录后生效。')
     print('已有 tmux 会话不会被关闭；新配置需在新会话或手动重新加载后使用。')
