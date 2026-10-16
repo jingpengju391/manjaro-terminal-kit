@@ -1,83 +1,130 @@
 #!/usr/bin/env python3
-"""Install the personal terminal preset. Never run as root."""
-import argparse, datetime, json, os, platform, shutil, subprocess, re, configparser
+"""Install user-level shell tools and desktop-specific terminal settings."""
+import argparse
+import datetime
+import json
+import os
 from pathlib import Path
-ap=argparse.ArgumentParser()
-ap.add_argument('--check',action='store_true',help='Read-only prerequisite check')
-ap.add_argument('--vscode',action='store_true',help='Also merge VS Code terminal font; requires plain JSON settings')
-ap.add_argument('--terminal-only',action='store_true',help='Only apply XFCE terminal appearance; back up settings first')
-a=ap.parse_args()
-if os.geteuid()==0: raise SystemExit('请用普通桌面用户运行，不要 sudo bash install.sh。')
-if platform.machine()!='x86_64': raise SystemExit('此离线工具包仅支持 x86_64。')
-h=Path.home(); base=Path(__file__).resolve().parent; p=base/'payload'
-required=['zsh','python3','xfconf-query','xfce4-terminal','fc-cache']
-if a.terminal_only: required=['python3','xfconf-query','xfce4-terminal','fc-cache']
-missing=[x for x in required if not shutil.which(x)]
-for f in ['/usr/share/zsh/manjaro-zsh-config','/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh','/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh']:
- if not a.terminal_only and not Path(f).is_file(): missing.append(f)
-if missing:
- print('缺少依赖：',*missing,sep='\n')
- raise SystemExit('请先执行：sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3')
-version_text=subprocess.check_output(['xfce4-terminal','--version'],text=True)
-match=re.search(r'xfce4-terminal\s+(\d+)\.(\d+)',version_text)
-if not match: raise SystemExit('无法识别 XFCE Terminal 版本，请提供 xfce4-terminal --version 的输出。')
-legacy=tuple(map(int,match.groups())) < (1,1)
-if not legacy:
- subprocess.run(['xfconf-query','-l'],check=True,stdout=subprocess.DEVNULL)
-print('终端设置后端：'+('terminalrc（旧版）' if legacy else 'xfconf'))
-vs=h/'.config/Code/User/settings.json'; vsdata=None
-if a.vscode:
- try: vsdata=json.loads(vs.read_text()) if vs.exists() else {}
- except ValueError: raise SystemExit('VS Code 配置含注释或尾逗号；请不带 --vscode 安装，再手动设置字体为 MesloLGS NF。')
-if a.check:
- print('环境检查通过；未修改任何配置。去掉 --check 才会应用设置。');raise SystemExit()
-backup=h/'.local/state/manjaro-terminal-kit'/datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f');backup.mkdir(parents=True)
-manifest={'files':[],'properties':[]}
-def save(): (backup/'manifest.json').write_text(json.dumps(manifest,indent=2))
-def keep(dst):
- rel=str(dst.relative_to(h)); item={'path':rel,'existed':dst.exists() or dst.is_symlink()}
- if item['existed']:
-  target=backup/'files'/rel;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(dst,target,follow_symlinks=False)
- manifest['files'].append(item);save()
-def copy(src,dst):
- keep(dst);dst.parent.mkdir(parents=True,exist_ok=True)
- if dst.is_symlink():dst.unlink()
- shutil.copy2(src,dst)
-shutil.copy2(base/'restore.py',backup/'restore.py');save()
-if not a.terminal_only:
- for src,dst in [(p/'zshrc',h/'.zshrc'),(p/'tmux.conf',h/'.tmux.conf'),(p/'starship.toml',h/'.config/starship.toml')]:copy(src,dst)
- for folder,target in [('bin','.local/bin'),('libexec','.local/libexec'),('fonts','.local/share/fonts/terminal-kit')]:
-  for src in (p/folder).iterdir():copy(src,h/target/src.name)
-if legacy:
- terminalrc=h/'.config/xfce4/terminal/terminalrc'
- keep(terminalrc)
- cfg=configparser.ConfigParser(interpolation=None,strict=False)
- cfg.optionxform=str
- if terminalrc.exists(): cfg.read(terminalrc)
- if not cfg.has_section('Configuration'): cfg.add_section('Configuration')
- for prop in json.loads((p/'terminal.json').read_text()):
-  key=''.join(part.capitalize() for part in prop['name'].split('-'))
-  cfg.set('Configuration',key,prop['value'])
- terminalrc.parent.mkdir(parents=True,exist_ok=True)
- with terminalrc.open('w') as f: cfg.write(f,space_around_delimiters=False)
-else:
- for prop in json.loads((p/'terminal.json').read_text()):
+import platform
+import shutil
+import subprocess
+import terminal_setup
 
-  name='/'+prop['name'];typ=prop['type']
-  old=subprocess.run(['xfconf-query','-c','xfce4-terminal','-p',name],capture_output=True,text=True)
-  manifest['properties'].append({'name':name,'type':typ,'existed':old.returncode==0,'value':old.stdout.strip()});save()
-  subprocess.run(['xfconf-query','-c','xfce4-terminal','-p',name,'--create','-t',typ,'-s',prop['value']],check=True)
-if vsdata is not None:
- keep(vs);vs.parent.mkdir(parents=True,exist_ok=True)
- vsdata['terminal.integrated.fontFamily']='MesloLGS NF'
- vsdata['terminal.integrated.defaultProfile.linux']='zsh'
- profiles=vsdata.setdefault('terminal.integrated.profiles.linux',{});profiles['zsh']={'path':'/usr/bin/zsh'}
- vs.write_text(json.dumps(vsdata,ensure_ascii=False,indent=4)+'\n')
-subprocess.run(['fc-cache','-f'],check=True)
-print('\n安装完成。备份与回滚命令：\npython3 '+str(backup/'restore.py'))
-print('已应用：隐藏标题栏/边框、菜单栏、工具栏、滚动条；默认 120x24；透明背景。')
-print('请新开 XFCE Terminal 窗口查看效果。旧窗口不一定自动改变；不要直接关闭有任务的窗口。')
-print('测试新窗口：xfce4-terminal --disable-server --hide-menubar --hide-toolbar --hide-borders')
-if a.terminal_only: raise SystemExit()
-print('运行 chsh -s /usr/bin/zsh 后重新登录；也可在当前终端执行 exec zsh。')
-print('全新终端生效；Ctrl+T 进入 work。已有 tmux 会话请先保存工作后重新创建，避免运行中的旧版本混用。')
+ap = argparse.ArgumentParser()
+ap.add_argument('--check', action='store_true', help='Read-only environment and target check')
+ap.add_argument('--vscode', action='store_true', help='Merge VS Code terminal font/profile')
+ap.add_argument('--terminal-only', action='store_true', help='Apply terminal appearance and font only')
+ap.add_argument('--terminal', choices=['auto', 'konsole', 'xfce4-terminal', 'gnome-terminal'], default='auto')
+a = ap.parse_args()
+if os.geteuid() == 0:
+    raise SystemExit('请用普通桌面用户运行，不要 sudo bash install.sh。')
+if platform.machine() != 'x86_64':
+    raise SystemExit('此工具包仅支持 x86_64。')
+if a.terminal_only and a.vscode:
+    ap.error('--terminal-only 与 --vscode 请分别执行。')
+h = Path.home()
+base = Path(__file__).resolve().parent
+p = base / 'payload'
+try:
+    desktop, session, terminal = terminal_setup.detect(requested=a.terminal)
+except RuntimeError as e:
+    raise SystemExit(str(e))
+print(f'桌面：{desktop}；显示会话：{session}；目标终端：{terminal}')
+print('目标按桌面默认终端选择；若你使用其他终端，请用 --terminal 明确指定。')
+required = ['python3', terminal, 'fc-cache']
+if terminal == 'xfce4-terminal':
+    required.append('xfconf-query')
+elif terminal == 'gnome-terminal':
+    required += ['gsettings', 'dconf']
+if not a.terminal_only:
+    required.append('zsh')
+    if session == 'wayland':
+        required.append('wl-copy')
+missing = [x for x in required if not shutil.which(x)]
+if not a.terminal_only:
+    for f in ['/usr/share/zsh/manjaro-zsh-config', '/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh', '/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh']:
+        if not Path(f).is_file():
+            missing.append(f)
+if missing:
+    print('缺少依赖：', *missing, sep='\n')
+    packages = ['python', 'fontconfig', terminal]
+    if terminal == 'xfce4-terminal': packages.append('xfconf')
+    if terminal == 'gnome-terminal': packages += ['glib2', 'dconf']
+    if not a.terminal_only:
+        packages += ['zsh', 'manjaro-zsh-config', 'zsh-autosuggestions', 'zsh-syntax-highlighting']
+        packages += ['wl-clipboard'] if session == 'wayland' else ['libxmu']
+    raise SystemExit('先执行：sudo pacman -Syu --needed ' + ' '.join(packages))
+try:
+    info = terminal_setup.preflight(terminal)
+except (RuntimeError, subprocess.CalledProcessError) as e:
+    raise SystemExit(f'终端环境检查失败，未修改配置：{e}')
+if terminal == 'gnome-terminal':
+    print('GNOME 限制：不保证去除标题栏/边框；透明度仅在发行版提供相应设置键时配置。')
+if not a.terminal_only and session not in ['x11', 'wayland']:
+    raise SystemExit('无法识别 X11/Wayland；请在目标电脑已登录的桌面会话中安装。')
+vs = terminal_setup.config_path(h) / 'Code/User/settings.json'
+vsdata = None
+if a.vscode:
+    try:
+        vsdata = json.loads(vs.read_text()) if vs.exists() else {}
+    except ValueError:
+        raise SystemExit('VS Code 配置含注释或尾逗号；请先不带 --vscode 安装，再手动设置终端字体。')
+if a.check:
+    print('检查通过；仅验证环境，不写入或备份配置。去掉 --check 才会应用。')
+    raise SystemExit()
+backup = h / '.local/state/manjaro-terminal-kit' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+backup.mkdir(parents=True)
+manifest = {'files': [], 'properties': [], 'dconf': [], 'desktop': desktop, 'terminal': terminal}
+
+def save():
+    (backup / 'manifest.json').write_text(json.dumps(manifest, indent=2))
+
+def keep(dst):
+    dst = dst.absolute()
+    if any(x.get('absolute') == str(dst) for x in manifest['files']):
+        return
+    existed = dst.exists() or dst.is_symlink()
+    stored = str(len(manifest['files']))
+    if existed:
+        target = backup / 'files' / stored
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst, target, follow_symlinks=False)
+    manifest['files'].append({'absolute': str(dst), 'stored': stored, 'existed': existed})
+    save()
+
+def copy(src, dst):
+    keep(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.is_symlink(): dst.unlink()
+    shutil.copy2(src, dst)
+
+shutil.copy2(base / 'restore.py', backup / 'restore.py')
+save()
+print('备份目录：' + str(backup))
+try:
+    # Fonts are needed for terminal-only too.
+    for src in (p / 'fonts').iterdir():
+        copy(src, terminal_setup.data_path(h) / 'fonts/terminal-kit' / src.name)
+    if not a.terminal_only:
+        for src, dst in [(p / 'zshrc', h / '.zshrc'), (p / 'tmux.conf', h / '.tmux.conf'), (p / 'starship.toml', terminal_setup.config_path(h) / 'starship.toml')]:
+            copy(src, dst)
+        for folder, target in [('bin', '.local/bin'), ('libexec', '.local/libexec')]:
+            for src in (p / folder).iterdir(): copy(src, h / target / src.name)
+    notes = terminal_setup.configure(terminal, info, h, json.loads((p / 'terminal.json').read_text()), keep, manifest, save)
+    if vsdata is not None:
+        keep(vs)
+        vs.parent.mkdir(parents=True, exist_ok=True)
+        vsdata['terminal.integrated.fontFamily'] = 'MesloLGS NF'
+        vsdata['terminal.integrated.defaultProfile.linux'] = 'zsh'
+        vsdata.setdefault('terminal.integrated.profiles.linux', {})['zsh'] = {'path': '/usr/bin/zsh'}
+        vs.write_text(json.dumps(vsdata, ensure_ascii=False, indent=4) + '\n')
+    subprocess.run(['fc-cache', '-f'], check=True)
+except Exception:
+    print('安装未完成。此前已修改项目的备份仍保留，恢复命令：\npython3 ' + str(backup / 'restore.py'))
+    raise
+print('\n'.join(notes))
+print('配置已保存；不是对现有窗口外观的验证。用 ~/.local/bin/terminal-kit 打开新窗口查看。')
+print('恢复命令：\npython3 ' + str(backup / 'restore.py'))
+if not a.terminal_only:
+    print('用 chsh -s /usr/bin/zsh 设置默认 shell 后重新登录；当前空闲 shell 可执行 exec zsh。')
+    print('已有 tmux 会话不会被关闭；新配置需在新会话或手动重新加载后使用。')

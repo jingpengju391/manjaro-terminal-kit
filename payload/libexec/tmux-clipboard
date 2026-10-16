@@ -1,0 +1,10 @@
+#!/bin/sh
+# Clipboard helper for local desktop sessions; never silently use Xwayland.
+if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    if command -v wl-copy >/dev/null 2>&1; then
+        exec wl-copy
+    fi
+    printf '%s\n' 'Missing wl-copy: install wl-clipboard.' >&2
+    exit 1
+fi
+exec "$HOME/.local/bin/xclip" -in -selection clipboard >/dev/null

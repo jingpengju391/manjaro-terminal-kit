@@ -1,8 +1,31 @@
-# Manjaro XFCE 终端配置包
+# Manjaro 终端配置包（KDE Plasma / Xfce / GNOME）
 
 将这套 **Starship 提示符 + zsh 命令高亮 + fzf 搜索 + tmux 分屏与监控** 迁移到另一台电脑。
 
-> **适用环境：x86_64 架构的 Manjaro XFCE。** 在目标电脑的图形桌面终端中操作。安装脚本使用普通用户运行，会先备份原配置。
+> **适用环境：x86_64 架构的 Manjaro，KDE Plasma / Xfce / GNOME 桌面。具体能力以实际终端为准。** 在目标电脑的图形桌面终端中操作。安装脚本使用普通用户运行，会先备份原配置。
+
+## 先确认桌面与终端
+
+安装器先读取 `XDG_CURRENT_DESKTOP` / `DESKTOP_SESSION` 和 X11/Wayland 信息，再检查对应终端是否安装，并打印所选目标。自动选择的是桌面常用终端，不是猜测当前 tmux 外层应用；使用其他终端时务必用 `--terminal` 指定。
+
+| 桌面 | 自动选择 | 配置方式 |
+| --- | --- | --- |
+| KDE Plasma | Konsole（21.12+） | `konsolerc` + 独立 Terminal Kit profile/colorscheme |
+| Xfce | XFCE Terminal | 1.1+ 用 xfconf；旧版用 terminalrc |
+| GNOME | GNOME Terminal | 默认 profile 的 GSettings/dconf |
+
+只有 Ptyxis 或 GNOME Console（kgx）时会停止并提示，**不会把它们当作 GNOME Terminal**。未知桌面或无法识别目标时要求显式选择，不会盲写 XFCE 配置。
+
+| 外观项目 | Konsole | XFCE Terminal | GNOME Terminal |
+| --- | --- | --- | --- |
+| 隐藏标题栏/边框 | 写入应用自身无边框选项 | 支持 | 没有通用支持，明确提示未配置 |
+| 菜单栏 | 默认配置及启动参数 | 支持 | 启动参数隐藏；新版全局键可能已弃用 |
+| 工具栏 | 配置及支持时的启动参数 | 支持 | Headerbar 可关闭，但不等于无标题栏 |
+| 滚动条 | 隐藏 | 隐藏 | 隐藏 |
+| 背景透明 | 75% 不透明度，依赖合成器 | 背景深度 0.75，依赖合成器 | 仅发行版存在透明度扩展键时配置；标准版不支持 |
+| 默认尺寸 | 120×24，关闭记忆旧窗口大小 | 120×24 | 120×24 |
+
+**“写入成功”不等于正在打开的窗口已经更新。** 安装器生成 `~/.local/bin/terminal-kit`，用它打开新窗口查看；不会强制关闭已有任务。
 
 ## 目录
 
@@ -26,7 +49,7 @@
 | tmux | work 会话、多窗口、左右/上下分屏、组合键切换 |
 | 顶部监控 | CPU、内存、网络上传/下载和历史曲线，占三行 |
 | 字体 | MesloLGS NF，支持提示符图标 |
-| XFCE 终端 | 默认 120 列 × 24 行、透明背景、隐藏菜单栏/边框/滚动条 |
+| 原生终端外观 | 按检测到的终端设置字体、尺寸、滚动条等；透明度及无边框支持见上表 |
 
 **不包含**桌面壁纸、任务栏透明度、显示器布局、VS Code 主题和扩展，也不复制个人命令历史、密码或项目文件。
 
@@ -54,13 +77,24 @@ cd manjaro-terminal-kit
 
 ### 第二步：安装系统依赖
 
-如果目标电脑已装齐依赖，可以直接进入下一步。否则执行：
+先安装公共依赖（会完整升级系统）：
 
 ```bash
-sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting xfce4-terminal python fontconfig python-gobject gtk3
+sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-highlighting python fontconfig
 ```
 
-依赖安装需要网络和管理员密码。主题、字体、Starship、fzf 和 tmux 已打包，不需要再次下载。
+根据桌面选择下面一条，**不要全部安装**：
+
+```bash
+# KDE Plasma
+sudo pacman -Syu --needed konsole
+# Xfce
+sudo pacman -Syu --needed xfce4-terminal xfconf
+# GNOME：需要 GNOME Terminal，Ptyxis/Console 暂不支持
+sudo pacman -Syu --needed gnome-terminal glib2 dconf
+```
+
+Wayland 会话还需要 `sudo pacman -Syu --needed wl-clipboard`；X11 会话需要 `sudo pacman -Syu --needed libxmu`。检查命令会列出缺失依赖。字体、Starship、fzf、tmux 和 X11 xclip 已包含在仓库中。
 
 > `sudo` 只用于上面的系统依赖安装。**不要执行 `sudo bash install.sh`**，否则会把配置安装给错误的用户，脚本也会拒绝运行。
 
@@ -70,7 +104,7 @@ sudo pacman -Syu --needed zsh manjaro-zsh-config zsh-autosuggestions zsh-syntax-
 bash install.sh --check
 ```
 
-显示“环境检查通过；未修改任何配置”后继续。缺少依赖时按提示安装；如果提示无法访问 XFCE 配置，请在目标电脑已登录的图形桌面中运行，并先打开一次 XFCE Terminal。
+显示“检查通过；仅验证环境，不写入或备份配置”后继续。缺少依赖时按提示安装；如果提示无法访问配置服务，请在目标电脑已登录的图形桌面中运行，并先打开一次对应终端。
 
 ### 第四步：安装配置
 
@@ -78,7 +112,7 @@ bash install.sh --check
 bash install.sh
 ```
 
-安装会备份并替换现有 `.zshrc`、`.tmux.conf`、Starship 配置和同名用户工具，设置字体及 XFCE 终端外观。**已有 alias、NVM 等个人初始化不会自动合并**，需要从备份中按需取回。
+安装会备份并替换现有 `.zshrc`、`.tmux.conf`、Starship 配置和同名用户工具，设置字体及检测到的原生终端外观。**已有 alias、NVM 等个人初始化不会自动合并**，需要从备份中按需取回。
 
 安装末尾会显示备份目录和完整回滚命令，建议保留这段输出。
 
@@ -127,7 +161,7 @@ bash install.sh
 
 **`git pull` 只更新仓库文件，不会自动更新正在使用的终端配置。** 安装前检查 `git pull` 和 `--check` 是否成功；若失败，先解决报错，不要继续安装。每次安装都会生成一份新备份；重新安装会覆盖相关个人配置，先保存自己的定制。
 
-只更新原生终端外观时，最后一条改为：
+只更新原生终端外观及字体时，最后一条改为：
 
 ```bash
 bash install.sh --terminal-only
@@ -269,11 +303,11 @@ tmux list-sessions
 | 字体 | MesloLGS NF 10 |
 | 新窗口尺寸 | 120 列 × 24 行，可自由拖动改变 |
 | 命令及成功提示符颜色 | 灰薄荷绿 `#9BC8AC` |
-| XFCE 终端背景 | 透明模式，背景深度参数 `0.75` |
-| 菜单栏 / 窗口边框 / 滚动条 | 默认隐藏 |
+| 终端背景 | Konsole / XFCE 为 75% 不透明度；GNOME 取决于是否提供透明度扩展 |
+| 菜单栏 / 工具栏 / 窗口边框 / 滚动条 | 按终端能力隐藏，限制见开头对照表 |
 | Starship 信息 | 根据当前目录和项目自动显示 |
 
-透明背景需要在 **窗口管理器微调 → 合成器** 中启用显示合成。背景下方如果有应用窗口，会透出应用内容；它不是只显示桌面壁纸的背景图。
+透明背景需要桌面合成器支持。Xfce 可在 **窗口管理器微调 → 合成器** 中启用显示合成。背景下方如果有应用窗口，会透出应用内容；它不是只显示桌面壁纸的背景图。
 
 隐藏窗口边框后，XFCE 常见操作是按住 Alt 并用鼠标左键拖动窗口；实际行为取决于目标电脑的窗口管理器配置。右键终端可进入偏好设置，恢复菜单或其他选项。
 
@@ -333,11 +367,11 @@ fc-match 'MesloLGS NF'
 
 ### Ctrl+T、Ctrl+N 或方向组合键没反应
 
-确认当前使用 zsh、已进入 tmux（除 Ctrl+T 外），并检查桌面或 VS Code 有没有拦截这些按键。可以先在独立 XFCE Terminal 测试，再用第四节的前缀快捷键作为替代。
+确认当前使用 zsh、已进入 tmux（除 Ctrl+T 外），并检查桌面或 VS Code 有没有拦截这些按键。可以先在独立终端（Konsole / XFCE Terminal / GNOME Terminal）测试，再用第四节的前缀快捷键作为替代。
 
 ### 透明效果和原电脑不完全一样
 
-透明效果受合成器、壁纸、背后窗口、GTK 主题和字体渲染影响。本包不会修改全局桌面主题和任务栏，因此不保证两台电脑的整个桌面完全相同。
+透明效果受合成器、壁纸、背后窗口、GTK 主题和字体渲染影响。本包不会修改全局桌面主题和任务栏，因此不保证两台电脑的整个桌面完全相同。GNOME 标准终端不支持透明度时会明确跳过。
 
 ### 安装出现校验失败
 
@@ -356,7 +390,11 @@ fc-match 'MesloLGS NF'
 | `~/.local/libexec/tmux-monitor.py` | 监控数据与曲线绘制 |
 | `~/.local/libexec/tmux-monitor-window.py` | 监控分屏创建、恢复与高度调整 |
 | `~/.local/share/fonts/terminal-kit/` | 字体 |
-| XFCE 的 `xfce4-terminal` 配置通道 | 透明度、默认尺寸、菜单和滚动条等 |
+| `~/.config/konsolerc`、`~/.local/share/konsole/TerminalKit.*` | KDE Konsole 外观及专用 profile |
+| XFCE 的 `xfce4-terminal` 配置通道或旧版 terminalrc | XFCE 外观设置 |
+| GNOME Terminal 的 dconf 配置 | 字体、尺寸、滚动条及支持的外观项 |
+| `~/.local/bin/terminal-kit` | 用目标终端专用参数打开新窗口 |
+| `~/.local/libexec/tmux-clipboard` | 按 X11 / Wayland 选择剪贴板工具 |
 | `~/.config/Code/User/settings.json` | 仅 `--vscode` 时修改 |
 
 ### 恢复安装前的配置
@@ -389,9 +427,9 @@ python3 ~/.local/state/manjaro-terminal-kit/实际时间戳/restore.py
 ## 9. 适用范围与验证情况
 
 - 包内工具版本：Starship **1.26.0**、fzf **0.74.5**、tmux **3.7c**。
-- 面向 **x86_64 Manjaro XFCE**；ARM、Windows、GNOME/KDE 不在本包自动安装范围内。
+- 面向 **x86_64 Manjaro KDE Plasma / Xfce / GNOME**，支持的终端及限制见本文开头。ARM、Windows 不在安装范围内。
 - 包内校验、本机只读依赖检查、Python/zsh/Bash 语法和 Starship TOML 解析已检查。
-- 尚未在另一台全新 Manjaro 电脑上完成端到端安装验证。
+- 已在本机 Xfce 做只读预检；自动化测试覆盖桌面分流、KDE 文件写入及备份恢复、GNOME 键备份和不支持项提示。**尚未在真实 KDE/GNOME 桌面完成视觉验收**，不能承诺所有版本外观完全一致。
 - 第三方许可保存在 `licenses/`，各组件保留原作者版权。
 
 ### Ctrl+- 被终端拦截时
@@ -430,22 +468,39 @@ bash install.sh --check
 
 依据：[Manjaro Pacman 官方说明](https://wiki.manjaro.org/index.php?title=Pacman_Overview/en)。
 
-## 单独应用原生 XFCE 终端外观
+## 单独应用原生终端外观（推荐用于修复已有安装）
 
-`--check` **只检查环境，不修改任何外观**。完整安装本来就包含终端设置；也可以只应用终端外观：
-
-```bash
-bash install.sh --terminal-only
-```
-
-应用的项目：隐藏标题栏及窗口边框、菜单栏、工具栏和滚动条；默认窗口 120 列 × 24 行；透明背景深度 0.75；字体 MesloLGS NF 10。该选项不安装字体或修改 zsh/tmux，字体需先通过完整安装获得。
-
-安装器识别 XFCE Terminal 版本：1.1 及以上通过 xfconf 设置，旧版写入 terminalrc。修改前均备份，可用该次生成的 restore.py 恢复。
-
-旧窗口可能保留创建时的标题栏/菜单状态。请新开一个窗口验证：
+在另一台电脑的仓库目录中执行。KDE 示例：
 
 ```bash
-xfce4-terminal --disable-server --hide-menubar --hide-toolbar --hide-borders
+git pull --ff-only
+bash install.sh --terminal konsole --terminal-only --check
+bash install.sh --terminal konsole --terminal-only
+~/.local/bin/terminal-kit
 ```
 
-不要为了刷新外观强制关闭有任务的终端。透明效果依赖 XFCE 合成器；这些设置只适用于 XFCE Terminal，不会隐藏 VS Code 的应用标题栏。
+Xfce 将 `konsole` 改为 `xfce4-terminal`；GNOME 将其改为 `gnome-terminal`。省略 `--terminal` 时自动按桌面选择。`--check` 只检查，不修改和备份；真正应用时才创建备份。
+
+`--terminal-only` 会配置原生终端并安装配套字体，不修改 zsh/tmux。KDE 会创建独立的 `TerminalKit.profile` 与 `TerminalKit.colorscheme`，切换 Konsole 默认 profile，并保存菜单、工具栏、标题栏等默认选项；不修改全局 KWin 主题。
+
+### 为什么 KDE 旧窗口没变化
+
+Konsole 进程可能缓存设置，在退出时写回旧状态。先保存工作，再关闭旧 Konsole 窗口，必要时重新应用；也可以先用 `~/.local/bin/terminal-kit` 打开独立窗口验证。不要为了更新外观强制杀掉承载工作任务的进程。GNOME Headerbar 设置同样可能需要保存任务后重启终端服务。
+
+### 备份与恢复的范围
+
+所有将被修改的文件都会在写入前备份；原来不存在的文件会记录为新建，恢复时删除。支持 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` 自定义目录。
+
+- **KDE**：`konsolerc`、Terminal Kit profile/colorscheme、字体和 `terminal-kit` 启动脚本。
+- **Xfce**：逐项保存 xfconf 原值，或备份旧版 terminalrc；另保存字体及启动脚本。
+- **GNOME**：逐项备份 dconf 原始用户值，恢复时写回原值或恢复为系统默认；另保存字体及启动脚本。
+- **完整安装**：还会备份 zsh/tmux/Starship 配置及被替换的工具。
+
+安装会打印具体备份目录以及 `python3 /备份目录/restore.py`。恢复脚本只恢复这次记录的项目，不会把 KDE 配置当成 XFCE 设置恢复。既有旧版备份脚本仍保留其原有能力。
+
+### 配置依据
+
+- [Konsole 设置项源码](https://github.com/KDE/konsole/blob/master/src/settings/konsole.kcfg)
+- [Konsole 配置文件字段](https://github.com/KDE/konsole/blob/master/src/profile/Profile.cpp)
+- [GNOME Terminal GSettings schema](https://github.com/GNOME/gnome-terminal/blob/master/src/org.gnome.Terminal.gschema.xml)
+- [XFCE 配置后端迁移说明](https://forum.xfce.org/viewtopic.php?id=16911)
