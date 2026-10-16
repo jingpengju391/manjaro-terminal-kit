@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Restore a snapshot, or replay all snapshots backwards to the earliest recorded state."""
 import argparse
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import shutil
@@ -45,6 +46,7 @@ def main():
     parser.add_argument('--backup', help='latest / original / 备份目录')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--wait-konsole', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--konsole-lock-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     home = Path.home()
     root = home/'.local/state/manjaro-terminal-kit'
@@ -68,23 +70,26 @@ def main():
     records = [(path, json.loads((path/'manifest.json').read_text())) for path in paths]
     for path, manifest in records: validate(path, manifest)
     has_konsole = any(m.get('terminal') == 'konsole' or any(destination(e, home).name == 'konsolerc' for e in m['files']) for _, m in records)
-    if has_konsole:
-        if args.wait_konsole:
-            konsole_guard.wait_until_closed()
-        elif konsole_guard.running():
-            # Pass the resolved snapshot, not the implicit script-location default.
-            konsole_guard.defer(Path(__file__).resolve(), ['--backup', selected], root/'restore-after-close.log')
-            return
-    for path, manifest in records:
-        restore_backup(path, manifest, home)
-        print('已恢复：', path.name)
-    subprocess.run(['fc-cache', '-f'], check=True)
-    shell = any(destination(e, home).name == '.zshrc' for _, m in records for e in m['files'])
-    print('恢复完成。' + ('已还原记录中的 shell/提示符配置。' if shell else '这次备份不含 .zshrc，未恢复 shell/提示符皮肤；可选择 original 回溯全部备份。'))
-    print('请新开终端并先在 tmux 外检查；已有 zsh/tmux 会话仍可能保留运行中的旧提示符和状态栏。')
-    print('恢复的是备份前的样子，并不额外隐藏标题栏/工具栏。账户登录 shell（chsh）及备份前已存在的主题不会被重置。')
-    if args.wait_konsole:
-        subprocess.Popen(['konsole', '--separate'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        with (konsole_guard.operation_lock(root/'konsole-operation.lock', args.konsole_lock_fd)
+              if has_konsole else nullcontext()) as lock:
+            if has_konsole:
+                if args.wait_konsole:
+                    konsole_guard.wait_until_closed()
+                elif konsole_guard.running():
+                    # Pass the resolved snapshot, not the implicit script-location default.
+                    konsole_guard.defer(Path(__file__).resolve(), ['--backup', selected], root/'restore-after-close.log', lock)
+                    return
+            for path, manifest in records:
+                restore_backup(path, manifest, home)
+                print('已恢复：', path.name)
+            subprocess.run(['fc-cache', '-f'], check=True)
+            shell = any(destination(e, home).name == '.zshrc' for _, m in records for e in m['files'])
+            print('恢复完成。' + ('已还原记录中的 shell/提示符配置。' if shell else '这次备份不含 .zshrc，未恢复 shell/提示符皮肤；可选择 original 回溯全部备份。'))
+            print('请新开终端并先在 tmux 外检查；已有 zsh/tmux 会话仍可能保留运行中的旧提示符和状态栏。')
+            print('恢复的是备份前的样子，并不额外隐藏标题栏/工具栏。账户登录 shell（chsh）及备份前已存在的主题不会被重置。')
+    except RuntimeError as e:
+        raise SystemExit(str(e)) from None
 
 
 if __name__ == '__main__':

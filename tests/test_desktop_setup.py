@@ -98,7 +98,12 @@ class InstallerTests(unittest.TestCase):
     def test_full_install_launcher_and_restore(self):
         self.kde_roundtrip(terminal_only=False)
 
-    def kde_roundtrip(self, terminal_only):
+    def test_deferred_install_applies_without_opening_a_window(self):
+        for terminal_only in (False, True):
+            with self.subTest(terminal_only=terminal_only):
+                self.kde_roundtrip(terminal_only=terminal_only, deferred=True)
+
+    def kde_roundtrip(self, terminal_only, deferred=False):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder)
             config = home / '.config'
@@ -116,8 +121,12 @@ class InstallerTests(unittest.TestCase):
                  patch('os.geteuid', return_value=1000), patch('shutil.which', side_effect=lambda n: '/usr/bin/' + n), \
                  patch('terminal_setup.preflight', return_value={'help': '--hide-toolbars'}), \
                  patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0)), \
-                 patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else [])), contextlib.redirect_stdout(io.StringIO()):
+                 patch('subprocess.Popen') as launch, patch('konsole_guard.running', return_value=False), \
+                 patch('konsole_guard.wait_until_closed') as wait, \
+                 patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else []) + (['--wait-konsole'] if deferred else [])), contextlib.redirect_stdout(io.StringIO()):
                 runpy.run_path(str(ROOT / 'install.py'), run_name='__main__')
+                launch.assert_not_called()
+                self.assertEqual(wait.call_count, int(deferred))
                 self.assertEqual(setup.read_ini(rc).get('Unrelated', 'Keep'), 'hello')
                 self.assertTrue(rc.read_text().startswith('MenuBar=Disabled\n# keep root keys and comments\nRootKey=a=b\n'))
                 self.assertNotIn('__ungrouped__', rc.read_text())
@@ -129,7 +138,7 @@ class InstallerTests(unittest.TestCase):
                     self.assertIn('Name=Terminal Kit', (home / '.local/share/applications/terminal-kit.desktop').read_text())
                 profile = home / '.local/share/konsole/TerminalKit.profile'
                 self.assertEqual(setup.read_ini(profile).get('Scrolling', 'ScrollBarPosition'), '2')
-                backups = list((home / '.local/state/manjaro-terminal-kit').iterdir())
+                backups = [p.parent for p in (home / '.local/state/manjaro-terminal-kit').glob('*/manifest.json')]
                 self.assertEqual(len(backups), 1)
                 manifest = json.loads((backups[0] / 'manifest.json').read_text())
                 self.assertNotIn('State=', kde_state.read_text())

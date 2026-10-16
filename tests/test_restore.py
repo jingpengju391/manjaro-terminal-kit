@@ -62,6 +62,21 @@ class RestoreTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, '备份文件缺失'): restore.main()
             self.assertEqual(target.read_text(), 'current')
 
+    def test_deferred_restore_applies_without_opening_a_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target = home/'konsolerc'; target.write_text('current')
+            folder = self.make_backup(home/'backups', 'first', [(target, 'original')])
+            with patch('pathlib.Path.home', return_value=home), \
+                    patch('konsole_guard.wait_until_closed') as wait, \
+                    patch('subprocess.run'), patch('subprocess.Popen') as launch, \
+                    patch.object(sys, 'argv', ['restore.py', '--backup', str(folder), '--wait-konsole']), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                restore.main()
+            wait.assert_called_once()
+            launch.assert_not_called()
+            self.assertEqual(target.read_text(), 'original')
+
     def test_wait_timeout_makes_no_changes(self):
         with patch('konsole_guard.running', return_value=True), patch('time.monotonic', side_effect=[0, 20]):
             with self.assertRaisesRegex(RuntimeError, '超时'): konsole_guard.wait_until_closed(timeout=10)

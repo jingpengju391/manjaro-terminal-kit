@@ -379,7 +379,7 @@ bash install.sh --restore ~/.local/state/manjaro-terminal-kit/实际时间戳
 ~/.local/state/manjaro-terminal-kit/restore-after-close.log
 ```
 
-完成后会自动打开一个新的 Konsole。若没有出现，可用文件管理器查看日志中的“配置已保存”或“恢复完成”。如果超时，没有进行这次写入，需要重新执行。后台等待期间不要再同时执行另一条安装或恢复命令。
+完成后不会自动打开 Konsole。请用文件管理器查看日志，确认出现“配置已保存”或“恢复完成”后，再手动打开一个终端。如果超时，没有进行这次写入，需要重新执行。同一用户同时只能运行一个 Konsole 安装或恢复任务；重复执行会提示已有任务，既不会排队，也不会再创建后台任务。
 
 恢复后请先在 **新开的终端、tmux 外** 检查皮肤。已有 zsh 的提示符和 tmux 状态栏保存在进程内，不会随配置文件回退自动改变。脚本不终止工作会话，也不修改通过 `chsh` 设置的登录 shell。
 
@@ -493,7 +493,7 @@ KDE 工具栏布局处理依据 [KMainWindow 的恢复顺序](https://github.com
 git pull --ff-only && bash install.sh --hide-chrome
 ```
 
-按提示保存任务、关闭全部 Konsole 窗口；完成后新窗口会携带隐藏参数自动打开。以后可从应用菜单的 Konsole 或 Terminal Kit 打开。若桌面快捷方式是你单独复制的文件、或自己直接运行 `konsole`，它可能不经过这个入口，可明确运行：
+按提示保存任务、关闭全部 Konsole 窗口；用文件管理器确认日志显示完成后，再从应用菜单的 Konsole 或 Terminal Kit 手动打开新窗口。若桌面快捷方式是你单独复制的文件、或自己直接运行 `konsole`，它可能不经过这个入口，可明确运行：
 
 ```bash
 konsole --separate --hide-menubar --hide-tabbar --hide-toolbars
