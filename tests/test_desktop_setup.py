@@ -37,6 +37,20 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(setup.detect({'XDG_CURRENT_DESKTOP': 'KDE'}, self.which('xfce4-terminal'), 'xfce4-terminal')[2], 'xfce4-terminal')
 
 class InstallerTests(unittest.TestCase):
+    def test_kconfig_edit_is_idempotent_and_keeps_nested_groups(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'konsolerc'
+            path.write_text('MenuBar=Disabled\n# comment\n[MainWindow][Toolbar sessionToolbar]\nVisible=Enabled\nOther=value\n')
+            changes = {'MainWindow][Toolbar sessionToolbar': {'Visible': 'Disabled'}, 'New': {'Key': 'value'}}
+            before = []
+            setup.edit_ini(path, changes, lambda p: before.append(p.read_text()))
+            first = path.read_text()
+            setup.edit_ini(path, changes, lambda p: None)
+            self.assertEqual(path.read_text(), first)
+            self.assertIn('Other=value', first)
+            self.assertIn('Visible=Enabled', before[0])
+            self.assertEqual(setup.read_ini(path).get('New', 'Key'), 'value')
+
     def test_kde_install_backup_restore_roundtrip(self):
         self.kde_roundtrip(terminal_only=True)
 
@@ -49,7 +63,7 @@ class InstallerTests(unittest.TestCase):
             config = home / '.config'
             config.mkdir()
             rc = config / 'konsolerc'
-            original = '[Desktop Entry]\nDefaultProfile=Personal.profile\n[Unrelated]\nKeep=hello\n'
+            original = 'MenuBar=Disabled\n# keep root keys and comments\nRootKey=a=b\n[Desktop Entry]\nDefaultProfile=Personal.profile\n[Unrelated]\nKeep=hello\n'
             rc.write_text(original)
             shell = home / '.zshrc'
             shell.write_text('keep my shell\n')
@@ -61,6 +75,8 @@ class InstallerTests(unittest.TestCase):
                  patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else [])), contextlib.redirect_stdout(io.StringIO()):
                 runpy.run_path(str(ROOT / 'install.py'), run_name='__main__')
                 self.assertEqual(setup.read_ini(rc).get('Unrelated', 'Keep'), 'hello')
+                self.assertTrue(rc.read_text().startswith('MenuBar=Disabled\n# keep root keys and comments\nRootKey=a=b\n'))
+                self.assertNotIn('__ungrouped__', rc.read_text())
                 self.assertEqual(setup.read_ini(rc).get('KonsoleWindow', 'RemoveWindowTitleBarAndFrame'), 'true')
                 if terminal_only:
                     self.assertEqual(shell.read_text(), 'keep my shell\n')

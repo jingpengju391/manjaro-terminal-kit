@@ -451,3 +451,13 @@ Konsole 进程可能缓存设置，在退出时写回旧状态。先保存工作
 - [Konsole 配置文件字段](https://github.com/KDE/konsole/blob/master/src/profile/Profile.cpp)
 - [GNOME Terminal GSettings schema](https://github.com/GNOME/gnome-terminal/blob/master/src/org.gnome.Terminal.gschema.xml)
 - [XFCE 配置后端迁移说明](https://forum.xfce.org/viewtopic.php?id=16911)
+
+### KDE 安装报 `MissingSectionHeaderError`
+
+旧版安装器无法读取以 `MenuBar=Disabled` 等无分组键开头的 `konsolerc`。已改为保留原文、仅更新目标键，不需要删除自己的配置文件。更新后重试：
+
+```bash
+git pull --ff-only && bash install.sh
+```
+
+若需要恢复到失败安装之前，请使用那次输出的 `python3 /备份目录/restore.py`。再次安装会新建备份，新的备份代表重试前状态，不是第一次失败前的状态。

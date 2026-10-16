@@ -49,26 +49,49 @@ def data_path(home):
 
 
 def read_ini(path):
+    # KConfig permits ungrouped keys before the first header. This synthetic
+    # group is read-only and is never serialized into the real file.
     cfg = configparser.ConfigParser(interpolation=None, strict=False, delimiters=('=',))
     cfg.optionxform = str
     if path.exists():
-        cfg.read(path)
+        cfg.read_string('[__ungrouped__]\n' + path.read_text())
     return cfg
 
 
 def edit_ini(path, changes, keep):
-    cfg = read_ini(path)
-    for group, values in changes.items():
-        if not cfg.has_section(group):
-            cfg.add_section(group)
-        for key, value in values.items():
-            cfg.set(group, key, str(value))
+    """Patch only owned keys, preserving KConfig root entries and comments."""
+    original = path.read_text() if path.exists() else ''
+    pending = {group: dict(values) for group, values in changes.items()}
+    output = []
+    group = None
+
+    def flush():
+        if group in pending:
+            for key, value in pending[group].items():
+                output.append(f'{key}={value}\n')
+            pending[group].clear()
+
+    for line in original.splitlines(keepends=True):
+        header = re.fullmatch(r'\s*\[(.*)\]\s*', line)
+        if header:
+            flush()
+            group = header.group(1)
+        elif group in changes and '=' in line and not line.lstrip().startswith(('#', ';')):
+            key = line.split('=', 1)[0].strip()
+            if key in changes[group]:
+                output.append(f'{key}={changes[group][key]}\n')
+                pending[group].pop(key, None)
+                continue
+        output.append(line if line.endswith('\n') else line + '\n')
+    flush()
+    for name, values in pending.items():
+        if values:
+            output.append(f'\n[{name}]\n')
+            output.extend(f'{key}={value}\n' for key, value in values.items())
     keep(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():
-        path.unlink()
-    with path.open('w') as stream:
-        cfg.write(stream, space_around_delimiters=False)
+    if path.is_symlink(): path.unlink()
+    path.write_text(''.join(output))
 
 
 def preflight(terminal):
