@@ -52,6 +52,51 @@ def data_path(home):
     return Path(os.environ.get('XDG_DATA_HOME', str(home / '.local/share')))
 
 
+# VS Code consumes a number of these before the integrated terminal can pass
+# them to tmux/zsh.  Keep this list next to the terminal setup rather than in
+# the installer so its merge behaviour is easy to test and document.
+VSCODE_TERMINAL_KEYBINDINGS = (
+    ('ctrl+t', '\u0014'),       # tmux work-session widget
+    ('ctrl+n', '\u000e'),       # tmux new window
+    ('ctrl+y', '\u0019'),       # tmux close window
+    ('ctrl+left', '\u001b[1;5D'),
+    ('ctrl+right', '\u001b[1;5C'),
+    ('ctrl+\\', '\u001c'),      # tmux horizontal split
+    ('ctrl+-', '\u001f'),       # Ctrl+_ / tmux vertical split
+    ('alt+left', '\u001b[1;3D'),
+    ('alt+right', '\u001b[1;3C'),
+    ('alt+up', '\u001b[1;3A'),
+    ('alt+down', '\u001b[1;3B'),
+    ('ctrl+r', '\u0012'),       # fzf history search
+    ('alt+t', '\u001bt'),       # fzf file search
+    ('alt+c', '\u001bc'),       # fzf directory search
+)
+
+
+def vscode_terminal_keybindings():
+    """Return the owned VS Code rules that forward project keys to its terminal."""
+    return [{'key': key, 'command': 'workbench.action.terminal.sendSequence',
+             'args': {'text': text}, 'when': 'terminalFocus'}
+            for key, text in VSCODE_TERMINAL_KEYBINDINGS]
+
+
+def merge_vscode_keybindings(existing):
+    """Replace only this kit's old VS Code forwarding rules.
+
+    Rules are appended deliberately: VS Code resolves equally-specific custom
+    bindings in declaration order, so the migration kit wins a conflict while
+    the integrated terminal has focus.
+    """
+    owned = {key for key, _ in VSCODE_TERMINAL_KEYBINDINGS}
+    kept = [rule for rule in existing if not (
+        isinstance(rule, dict)
+        and rule.get('key') in owned
+        and rule.get('command') == 'workbench.action.terminal.sendSequence'
+        and rule.get('when') == 'terminalFocus'
+    )]
+    return kept + vscode_terminal_keybindings()
+
+
 def read_ini(path):
     # KConfig permits ungrouped keys before the first header. This synthetic
     # group is read-only and is never serialized into the real file.

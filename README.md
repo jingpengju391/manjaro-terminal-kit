@@ -142,7 +142,9 @@ bash install.sh --vscode
 
 ### 手动配置
 
-如果 `settings.json` 有注释或尾逗号，自动配置会在修改前停止。可以不带 `--vscode` 安装，再在 VS Code 设置中搜索并设置：
+`--vscode` 还会迁移 VS Code 集成终端所需的快捷键：`Ctrl+T`、`Ctrl+N`、`Ctrl+Y`、`Ctrl+←/→`、`Ctrl+\\`、`Ctrl+-`、`Alt+方向键`、`Ctrl+R`、`Alt+T`、`Alt+C`。这些规则仅在集成终端焦点内生效，并通过发送原始终端按键给 tmux/zsh；如与现有 VS Code 终端规则冲突，以本项目规则为准。编辑器和命令面板中的相同快捷键不受影响。
+
+如果 `settings.json` 或 `keybindings.json` 有注释或尾逗号，自动配置会在修改前停止。可以不带 `--vscode` 安装，再在 VS Code 设置中搜索并设置：
 
 | 设置项 | 值 |
 | --- | --- |
@@ -151,7 +153,7 @@ bash install.sh --vscode
 
 关闭旧的集成终端并新建终端。如果字体仍没更新，重新启动 VS Code。
 
-> VS Code 自身可能占用 `Ctrl+T`、`Ctrl+N` 或 `Alt+方向键`。这些 tmux 组合键只有传到终端才会生效；有冲突时在 VS Code 键盘快捷方式中调整对应绑定，或使用下文的 tmux 前缀快捷键。
+> 使用 `--vscode` 后，项目会在 VS Code 集成终端中转发这些按键。未使用该选项时，VS Code 可能拦截 `Ctrl+T`、`Ctrl+N` 或 `Alt+方向键`；可重新运行带 `--vscode` 的安装，或使用下文的 tmux 前缀快捷键。
 
 ## 4. tmux 使用与快捷键
 

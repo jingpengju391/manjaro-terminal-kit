@@ -36,6 +36,21 @@ class DetectionTests(unittest.TestCase):
     def test_override_respected(self):
         self.assertEqual(setup.detect({'XDG_CURRENT_DESKTOP': 'KDE'}, self.which('xfce4-terminal'), 'xfce4-terminal')[2], 'xfce4-terminal')
 
+    def test_vscode_terminal_bindings_replace_old_owned_rules_and_take_priority(self):
+        existing = [
+            {'key': 'ctrl+t', 'command': 'workbench.action.quickOpen'},
+            {'key': 'ctrl+t', 'command': 'workbench.action.terminal.sendSequence',
+             'args': {'text': 'old'}, 'when': 'terminalFocus'},
+            {'key': 'ctrl+shift+p', 'command': 'workbench.action.showCommands'},
+        ]
+        merged = setup.merge_vscode_keybindings(existing)
+        self.assertEqual(merged[0], existing[0])
+        self.assertEqual(merged[1], existing[2])
+        self.assertEqual(len(merged), 2 + len(setup.VSCODE_TERMINAL_KEYBINDINGS))
+        ctrl_t = next(rule for rule in merged if rule['key'] == 'ctrl+t' and rule.get('when') == 'terminalFocus')
+        self.assertEqual(ctrl_t['args']['text'], '\u0014')
+        self.assertEqual(merged[-1]['key'], 'alt+c')
+
 class InstallerTests(unittest.TestCase):
     def test_desktop_entry_patches_all_actions_without_duplicates(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -98,12 +113,15 @@ class InstallerTests(unittest.TestCase):
     def test_full_install_launcher_and_restore(self):
         self.kde_roundtrip(terminal_only=False)
 
+    def test_full_install_migrates_vscode_terminal_keybindings(self):
+        self.kde_roundtrip(terminal_only=False, vscode=True)
+
     def test_deferred_install_applies_without_opening_a_window(self):
         for terminal_only in (False, True):
             with self.subTest(terminal_only=terminal_only):
                 self.kde_roundtrip(terminal_only=terminal_only, deferred=True)
 
-    def kde_roundtrip(self, terminal_only, deferred=False):
+    def kde_roundtrip(self, terminal_only, deferred=False, vscode=False):
         with tempfile.TemporaryDirectory() as folder:
             home = Path(folder)
             config = home / '.config'
@@ -116,6 +134,10 @@ class InstallerTests(unittest.TestCase):
             kde_state.write_text('[MainWindow]\nState=old-toolbar-layout\nWidth=1200\n')
             shell = home / '.zshrc'
             shell.write_text('keep my shell\n')
+            keybindings = config / 'Code/User/keybindings.json'
+            if vscode:
+                keybindings.parent.mkdir(parents=True)
+                keybindings.write_text(json.dumps([{'key': 'ctrl+t', 'command': 'workbench.action.quickOpen'}]))
             env = {'XDG_CONFIG_HOME': str(config), 'XDG_DATA_HOME': str(home / '.local/share'), 'XDG_STATE_HOME': str(home / 'state'), 'XDG_CURRENT_DESKTOP': 'KDE', 'XDG_SESSION_TYPE': 'wayland'}
             with patch.dict(os.environ, env), patch('pathlib.Path.home', return_value=home), \
                  patch('os.geteuid', return_value=1000), patch('shutil.which', side_effect=lambda n: '/usr/bin/' + n), \
@@ -123,7 +145,7 @@ class InstallerTests(unittest.TestCase):
                  patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0)), \
                  patch('subprocess.Popen') as launch, patch('konsole_guard.running', return_value=False), \
                  patch('konsole_guard.wait_until_closed') as wait, \
-                 patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else []) + (['--wait-konsole'] if deferred else [])), contextlib.redirect_stdout(io.StringIO()):
+                 patch('sys.argv', ['install.py', '--terminal', 'konsole'] + (['--terminal-only'] if terminal_only else []) + (['--vscode'] if vscode else []) + (['--wait-konsole'] if deferred else [])), contextlib.redirect_stdout(io.StringIO()):
                 runpy.run_path(str(ROOT / 'install.py'), run_name='__main__')
                 launch.assert_not_called()
                 self.assertEqual(wait.call_count, int(deferred))
@@ -136,6 +158,11 @@ class InstallerTests(unittest.TestCase):
                 else:
                     self.assertIn(' -e zsh', (home / '.local/bin/terminal-kit').read_text())
                     self.assertIn('Name=Terminal Kit', (home / '.local/share/applications/terminal-kit.desktop').read_text())
+                if vscode:
+                    migrated = json.loads(keybindings.read_text())
+                    self.assertEqual(migrated[0]['command'], 'workbench.action.quickOpen')
+                    self.assertEqual(migrated[-1]['key'], 'alt+c')
+                    self.assertEqual(next(rule for rule in migrated if rule['key'] == 'ctrl+t' and rule.get('when') == 'terminalFocus')['args']['text'], '\u0014')
                 profile = home / '.local/share/konsole/TerminalKit.profile'
                 self.assertEqual(setup.read_ini(profile).get('Scrolling', 'ScrollBarPosition'), '2')
                 backups = [p.parent for p in (home / '.local/state/manjaro-terminal-kit').glob('*/manifest.json')]
@@ -154,6 +181,8 @@ class InstallerTests(unittest.TestCase):
                 self.assertFalse((home / '.local/share/applications/org.kde.konsole.desktop').exists())
                 self.assertFalse((home / '.local/share/applications/terminal-kit.desktop').exists())
                 self.assertEqual(shell.read_text(), 'keep my shell\n')
+                if vscode:
+                    self.assertEqual(json.loads(keybindings.read_text()), [{'key': 'ctrl+t', 'command': 'workbench.action.quickOpen'}])
 
     def test_gnome_records_dconf_before_writing_and_reports_limitations(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -73,11 +73,19 @@ if not a.terminal_only and session not in ['x11', 'wayland']:
     raise SystemExit('无法识别 X11/Wayland；请在目标电脑已登录的桌面会话中安装。')
 vs = terminal_setup.config_path(h) / 'Code/User/settings.json'
 vsdata = None
+vscode_keys = terminal_setup.config_path(h) / 'Code/User/keybindings.json'
+vscode_keydata = None
 if a.vscode:
     try:
         vsdata = json.loads(vs.read_text()) if vs.exists() else {}
     except ValueError:
         raise SystemExit('VS Code 配置含注释或尾逗号；请先不带 --vscode 安装，再手动设置终端字体。')
+    try:
+        vscode_keydata = json.loads(vscode_keys.read_text()) if vscode_keys.exists() else []
+    except ValueError:
+        raise SystemExit('VS Code keybindings.json 含注释或尾逗号；请先不带 --vscode 安装，再手动迁移终端快捷键。')
+    if not isinstance(vscode_keydata, list) or not all(isinstance(rule, dict) for rule in vscode_keydata):
+        raise SystemExit('VS Code keybindings.json 应为快捷键规则数组；未修改配置。')
 if a.check:
     print('检查通过；仅验证环境，不写入或备份配置。去掉 --check 才会应用。')
     raise SystemExit()
@@ -159,6 +167,10 @@ try:
                 vsdata['terminal.integrated.defaultProfile.linux'] = 'zsh'
                 vsdata.setdefault('terminal.integrated.profiles.linux', {})['zsh'] = {'path': '/usr/bin/zsh'}
                 vs.write_text(json.dumps(vsdata, ensure_ascii=False, indent=4) + '\n')
+                keep(vscode_keys)
+                vscode_keys.parent.mkdir(parents=True, exist_ok=True)
+                vscode_keydata = terminal_setup.merge_vscode_keybindings(vscode_keydata)
+                vscode_keys.write_text(json.dumps(vscode_keydata, ensure_ascii=False, indent=4) + '\n')
             if terminal == 'konsole':
                 cache_tool = shutil.which('kbuildsycoca6') or shutil.which('kbuildsycoca5')
                 if cache_tool:
