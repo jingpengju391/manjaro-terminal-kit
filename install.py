@@ -12,6 +12,7 @@ import subprocess
 import terminal_setup
 import konsole_guard
 import sys
+import tempfile
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--wait-konsole', action='store_true', help=argparse.SUPPRESS)
@@ -122,8 +123,19 @@ try:
         def copy(src, dst):
             keep(dst)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            if dst.is_symlink(): dst.unlink()
-            shutil.copy2(src, dst)
+            # Replacing an executable in place fails with ETXTBSY while it is
+            # running (notably the bundled tmux server).  Copy beside it, then
+            # atomically replace the directory entry; existing processes keep
+            # using the old inode and new invocations use the new file.
+            fd, tmp_name = tempfile.mkstemp(prefix=f'.{dst.name}.', dir=dst.parent)
+            os.close(fd)
+            tmp = Path(tmp_name)
+            try:
+                shutil.copy2(src, tmp)
+                os.replace(tmp, dst)
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
 
         shutil.copy2(base / 'restore.py', backup / 'restore.py')
         shutil.copy2(base / 'konsole_guard.py', backup / 'konsole_guard.py')
